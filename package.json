@@ -11,7 +11,8 @@
     "frontend:preview": "cd frontend && npm run preview",
     "install:all": "npm install && cd frontend && npm install",
     "setup:backend": "cd backend && pip install -r requirements.txt",
-    "setup:all": "npm install && cd frontend && npm install && cd ../backend && pip install -r requirements.txt"
+    "setup:all": "npm install && cd frontend && npm install && cd ../backend && pip install -r requirements.txt",
+    "db:push": "cd backend && alembic revision --autogenerate -m 'Changed DB Schema' && alembic upgrade head"
   },
   "keywords": [
     "react",
