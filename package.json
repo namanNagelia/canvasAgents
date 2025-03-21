@@ -1,0 +1,27 @@
+{
+  "name": "agentic-ai-canvas",
+  "version": "1.0.0",
+  "description": "Full-stack application with React frontend and FastAPI backend",
+  "main": "index.js",
+  "scripts": {
+    "frontend:dev": "cd frontend && npm run dev",
+    "backend:dev": "cd backend && uvicorn main:app --reload",
+    "dev": "concurrently \"npm run frontend:dev\" \"npm run backend:dev\"",
+    "frontend:build": "cd frontend && npm run build",
+    "frontend:preview": "cd frontend && npm run preview",
+    "install:all": "npm install && cd frontend && npm install",
+    "setup:backend": "cd backend && pip install -r requirements.txt",
+    "setup:all": "npm install && cd frontend && npm install && cd ../backend && pip install -r requirements.txt"
+  },
+  "keywords": [
+    "react",
+    "fastapi",
+    "vite",
+    "fullstack"
+  ],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
