@@ -12,9 +12,13 @@ from controller.utilities import process_file
 from controller.agents import run_agent, display_result
 import uuid
 import base64
+from langchain_core.messages import HumanMessage, AIMessage
 
 load_dotenv()
 router = fastapi.APIRouter()
+
+# Create a dictionary to store chat histories by session
+session_chat_histories = {}
 
 
 @router.post("/create_session")

@@ -18,6 +18,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import START, MessagesState, StateGraph
 
 from dotenv import load_dotenv
+from functools import partial
 
 load_dotenv()
 
@@ -439,13 +440,13 @@ When returning your explanation, use the structured output format with these fie
 
 
 def create_general_agent():
-
     system_prompt = f"""You are an expert assistant that answers the User's query in detail, and can search the web if needed
     {cot_planning_template}
     
     INSTRUCTIONS:
     1. Answer the User's query in detail
     2. If needed search the web for the answer
+    3. When the user asks a follow-up question, remember to consider our previous conversation
     """
 
     prompt = ChatPromptTemplate.from_messages([
@@ -454,7 +455,7 @@ def create_general_agent():
         MessagesPlaceholder(variable_name="agent_scratchpad"),
     ])
 
-    llm_with_tools = llm.bind_functions([tool, NoteResponse])
+    llm_with_tools = llm.bind_tools([tool, GeneralResponse])
 
     agent = (
         {
@@ -480,14 +481,16 @@ flashcard_agent = create_flashcard_agent()
 feynman_agent = create_feynman_agent()
 
 
-def run_agent(topic_request, file_paths=None, agent_type="note"):
+def run_agent(topic_request, file_paths=None, agent_type="note", session_id=None, chat_history=None):
     """
-    Run the specified agent with the given topic and optional files.
+    Run the specified agent with the given topic and optional files, maintaining conversation history.
 
     Args:
         topic_request (str): The topic to process
         file_paths (list): Optional list of file paths to process
         agent_type (str): Type of agent to use 
+        session_id (str): Optional session ID for persistence
+        chat_history (list): Optional list of previous messages
 
     Returns:
         dict: Structured output from the agent
@@ -506,6 +509,9 @@ def run_agent(topic_request, file_paths=None, agent_type="note"):
     if not selected_agent:
         raise ValueError(f"Unknown agent type: {agent_type}")
 
+    if chat_history is None:
+        chat_history = []
+
     # Process files if provided
     file_content = ""
     if file_paths:
@@ -518,13 +524,29 @@ def run_agent(topic_request, file_paths=None, agent_type="note"):
     else:
         message_content = f"Please process this topic: {topic_request}"
 
+    # Create a new message for the current request
+    new_message = HumanMessage(content=message_content)
+
+    # Combine history with the new message
+    messages = chat_history + [new_message]
+
+    # Invoke the agent with the combined messages
     result = selected_agent.invoke(
         {
-            "messages": [HumanMessage(content=message_content)]
+            "messages": messages
         }
     )
 
-    return result
+    # Update chat history with the new exchange
+    chat_history.append(new_message)
+
+    # Add the AI's response to the chat history (for next time)
+    if isinstance(result, dict) and "output" in result:
+        ai_response = AIMessage(content=str(result))
+        chat_history.append(ai_response)
+
+    # Return both the result and updated history
+    return result, chat_history
 
 
 def display_result(result, agent_type="note"):
@@ -562,25 +584,45 @@ def display_result(result, agent_type="note"):
     print("\n" + "="*50)
 
 
-# Example usage
+# Update the test function to demonstrate conversation memory
 if __name__ == "__main__":
-    # Example of running the diagram agent
+    # Start with empty chat history
+    chat_history = []
+
+    # First question
     topic = "Explain to me how pytorch and ML Works "
-
-    result = run_agent(
+    result, chat_history = run_agent(
         topic,
         file_paths=None,
-        agent_type="general"
+        agent_type="general",
+        chat_history=chat_history
     )
-
     display_result(result, agent_type="general")
 
-    topic = "Explain to me the practical applications of what i just asked you"
+    # # Follow-up question (should reference the prior conversation)
+    # topic = "Explain to me the practical applications of what i just asked you"
+    # result, chat_history = run_agent(
+    #     topic,
+    #     file_paths=None,
+    #     agent_type="general",
+    #     chat_history=chat_history
+    # )
+    # display_result(result, agent_type="general")
 
-    result = run_agent(
-        topic,
-        file_paths=None,
-        agent_type="general"
-    )
+    # topic = "Now give me a step by step tutorial on how to use it"
+    # result, chat_history = run_agent(
+    #     topic,
+    #     file_paths=None,
+    #     agent_type="step",
+    #     chat_history=chat_history
+    # )
+    # display_result(result, agent_type="step")
 
-    display_result(result, agent_type="general")
+    # topic = "Finally, show me a diagram of the concept"
+    # result, chat_history = run_agent(
+    #     topic,
+    #     file_paths=None,
+    #     agent_type="diagram",
+    #     chat_history=chat_history
+    # )
+    # display_result(result, agent_type="diagram")
