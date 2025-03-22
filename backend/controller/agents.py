@@ -7,7 +7,7 @@ from langgraph.prebuilt import create_react_agent
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import HumanMessage, AIMessage, FunctionMessage
 from langchain_tavily import TavilySearch
-from .utilities import process_file
+from utilities import process_file
 import json
 from typing import List, Dict, Any, Optional
 from langchain_core.pydantic_v1 import BaseModel, Field
@@ -62,6 +62,13 @@ Before answering, I will take these planning steps:
    - Ensure all requirements from the instructions are addressed
    - Consider how to make the output most useful for the user
 """
+
+
+class GeneralResponse(BaseModel):
+    """Final structured general output"""
+    planning_process: str = Field(
+        description="Detailed explanation of the planning process")
+    answer: str = Field(description="Answer to the user's query")
 
 
 class NoteResponse(BaseModel):
@@ -169,8 +176,13 @@ def parse_feynman_output(output):
     return parse_output(output, FeynmanResponse)
 
 
+def parse_general_output(output):
+    return parse_output(output, GeneralResponse)
+
+
 def create_note_taking_agent():
     system_prompt = f"""You are an expert note-taking assistant that creates clear, concise, and well-structured notes.
+
 
 {cot_planning_template}
 
@@ -194,7 +206,7 @@ When returning your notes, use the structured output format with these fields:
         MessagesPlaceholder(variable_name="agent_scratchpad"),
     ])
 
-    llm_with_tools = llm.bind_functions([tool, NoteResponse])
+    llm_with_tools = llm.bind_functions([tool, GeneralResponse])
 
     agent = (
         {
@@ -205,7 +217,7 @@ When returning your notes, use the structured output format with these fields:
         }
         | prompt
         | llm_with_tools
-        | parse_note_output
+        | parse_general_output
     )
 
     return AgentExecutor(tools=[tool], agent=agent, verbose=True)
@@ -428,7 +440,13 @@ When returning your explanation, use the structured output format with these fie
 
 def create_general_agent():
 
-    system_prompt = f"""You are an expert note-taking assistant that creates clear, concise, and well-structured notes and answer the User's query"""
+    system_prompt = f"""You are an expert assistant that answers the User's query in detail, and can search the web if needed
+    {cot_planning_template}
+    
+    INSTRUCTIONS:
+    1. Answer the User's query in detail
+    2. If needed search the web for the answer
+    """
 
     prompt = ChatPromptTemplate.from_messages([
         ("system", system_prompt),
@@ -447,7 +465,7 @@ def create_general_agent():
         }
         | prompt
         | llm_with_tools
-        | parse_note_output
+        | parse_general_output
     )
 
     return AgentExecutor(tools=[tool], agent=agent, verbose=True)
@@ -547,13 +565,22 @@ def display_result(result, agent_type="note"):
 # Example usage
 if __name__ == "__main__":
     # Example of running the diagram agent
-    topic = "Take detailed notes on the topics in the PDF with all equations "
-    file_path = "/Users/nnagelia/Downloads/14_MDPs_RL.pdf"
+    topic = "Explain to me how pytorch and ML Works "
 
     result = run_agent(
         topic,
-        file_paths=[file_path] if file_path else None,
-        agent_type="note"
+        file_paths=None,
+        agent_type="general"
     )
 
-    display_result(result, agent_type="note")
+    display_result(result, agent_type="general")
+
+    topic = "Explain to me the practical applications of what i just asked you"
+
+    result = run_agent(
+        topic,
+        file_paths=None,
+        agent_type="general"
+    )
+
+    display_result(result, agent_type="general")
