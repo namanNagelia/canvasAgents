@@ -1,14 +1,18 @@
-from langchain.agents import create_react_agent
+from langchain.agents import create_react_agent, AgentExecutor
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 from langchain_tavily import TavilySearch
 from langchain.chat_models import init_chat_model
 from langgraph.prebuilt import create_react_agent
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, AIMessage, FunctionMessage
 from langchain_tavily import TavilySearch
 from utilities import process_file
-from langchain_core.prompts import MessagesPlaceholder
+import json
+from typing import List, Dict, Any, Optional
+from langchain_core.pydantic_v1 import BaseModel, Field
+from langchain.agents.format_scratchpad import format_to_openai_function_messages
+from langchain_core.agents import AgentActionMessageLog, AgentFinish
 import os
 from dotenv import load_dotenv
 
@@ -21,24 +25,151 @@ os.environ["TAVILY_API_KEY"] = TAVILY_API_KEY
 if not TAVILY_API_KEY or not OPENAI_API_KEY:
     raise ValueError("Missing TAVILY_API_KEY or OPENAI_API_KEY in .env")
 
-# Function to process files
-
-
-# Set up search tool
 tool = TavilySearch(
     max_results=5,
     include_images=True,
     search_depth="advanced",
 )
 
-llm = init_chat_model("gpt-4o-mini", api_key=OPENAI_API_KEY,
+llm = init_chat_model("gpt-4o", api_key=OPENAI_API_KEY,
                       temperature=.7, max_tokens=7500)
 
 tools = [tool]
 
+cot_planning_template = """
+Before answering, I will take these planning steps:
+
+1. STEP PLANNING:
+   - Break down this task into clear, logical steps
+   - For each step, determine what information or analysis is needed
+   - Identify which tools might be useful at each step
+
+2. INFORMATION GATHERING:
+   - Determine what information I already know about this topic
+   - Identify knowledge gaps that require research
+   - Plan specific searches to fill those knowledge gaps
+
+3. ANALYSIS & ORGANIZATION:
+   - Plan how to structure the information for maximum clarity
+   - Determine the best format for presenting this information
+   - Consider how to connect concepts logically
+
+4. OUTPUT PREPARATION:
+   - Plan the format and structure of my final response
+   - Ensure all requirements from the instructions are addressed
+   - Consider how to make the output most useful for the user
+"""
+
+
+class NoteResponse(BaseModel):
+    """Final structured notes output"""
+    planning_process: str = Field(
+        description="Detailed explanation of the planning process")
+    research_method: str = Field(description="Method used for research")
+    formatted_notes: str = Field(
+        description="Complete formatted notes using markdown")
+
+
+class ResearchResponse(BaseModel):
+    """Final structured research notes output"""
+    planning_process: str = Field(
+        description="Detailed explanation of the planning and research methodology")
+    formatted_notes: str = Field(
+        description="Complete formatted notes with citations")
+    bibliography: str = Field(description="Bibliography or reference section")
+
+
+class StepResponse(BaseModel):
+    """Final structured problem-solving output"""
+    planning_process: str = Field(
+        description="Problem-solving plan and approach")
+    problem_identification: str = Field(
+        description="Type of problem and key concepts involved")
+    step_solution: str = Field(
+        description="Step-by-step solution with clear explanations")
+    visual_aids: Optional[str] = Field(
+        description="Diagrams or visual aids when applicable", default=None)
+
+
+class DiagramResponse(BaseModel):
+    """Final structured diagram output"""
+    planning_process: str = Field(
+        description="Detailed diagram planning process")
+    diagram_type_rationale: str = Field(
+        description="Explanation of why this diagram type was chosen")
+    diagram_code: str = Field(description="Complete Mermaid code")
+    interpretation: str = Field(
+        description="Brief explanation of how to interpret the diagram")
+
+
+class FlashcardResponse(BaseModel):
+    """Final structured flashcard output"""
+    planning_process: str = Field(
+        description="Planning approach to creating these flashcards")
+    organization_approach: str = Field(
+        description="How the content is organized and why")
+    flashcards: str = Field(
+        description="Complete set of flashcards in an organized format")
+    study_tips: str = Field(
+        description="Suggestions for effective study techniques")
+
+
+class FeynmanResponse(BaseModel):
+    """Final structured Feynman explanation output"""
+    planning_process: str = Field(
+        description="Planning process for simplifying this concept")
+    core_concept: str = Field(description="Core concept to be explained")
+    explanation: str = Field(
+        description="Simplified explanation using the Feynman technique")
+    examples: str = Field(
+        description="Analogies, examples, and visual descriptions")
+    summary: str = Field(description="Brief summary of the key takeaways")
+
+
+def parse_output(output, response_class):
+    if "function_call" not in output.additional_kwargs:
+        return AgentFinish(return_values={"output": output.content}, log=output.content)
+
+    function_call = output.additional_kwargs["function_call"]
+    name = function_call["name"]
+    inputs = json.loads(function_call["arguments"])
+
+    if name == response_class.__name__:
+        return AgentFinish(return_values=inputs, log=str(function_call))
+    else:
+        return AgentActionMessageLog(
+            tool=name, tool_input=inputs, log="", message_log=[output]
+        )
+
+
+def parse_note_output(output):
+    return parse_output(output, NoteResponse)
+
+
+def parse_research_output(output):
+    return parse_output(output, ResearchResponse)
+
+
+def parse_step_output(output):
+    return parse_output(output, StepResponse)
+
+
+def parse_diagram_output(output):
+    return parse_output(output, DiagramResponse)
+
+
+def parse_flashcard_output(output):
+    return parse_output(output, FlashcardResponse)
+
+
+def parse_feynman_output(output):
+    return parse_output(output, FeynmanResponse)
+
 
 def create_note_taking_agent():
-    system_prompt = """You are an expert note-taking assistant that creates clear, concise, and well-structured notes.
+    system_prompt = f"""You are an expert note-taking assistant that creates clear, concise, and well-structured notes.
+
+{cot_planning_template}
 
 INSTRUCTIONS:
 1. Research the topic thoroughly using your knowledge or web search when necessary
@@ -48,24 +179,39 @@ INSTRUCTIONS:
 5. Focus on accuracy and educational value
 6. Format using markdown for readability, for equations use latex
 
-When returning your notes, use the following structure:
-- First explain your thought process
-- Mention what research method you used
-- Then provide the complete formatted notes
+When returning your notes, use the structured output format with these fields:
+- planning_process: Detailed explanation of your planning process
+- research_method: Method used for research
+- formatted_notes: Complete formatted notes using markdown
 """
 
     prompt = ChatPromptTemplate.from_messages([
         ("system", system_prompt),
-        MessagesPlaceholder(variable_name="messages")
+        MessagesPlaceholder(variable_name="messages"),
+        MessagesPlaceholder(variable_name="agent_scratchpad"),
     ])
 
-    agent = create_react_agent(llm, tools, prompt=prompt)
+    llm_with_tools = llm.bind_functions([tool, NoteResponse])
 
-    return agent
+    agent = (
+        {
+            "messages": lambda x: x["messages"],
+            "agent_scratchpad": lambda x: format_to_openai_function_messages(
+                x["intermediate_steps"]
+            ),
+        }
+        | prompt
+        | llm_with_tools
+        | parse_note_output
+    )
+
+    return AgentExecutor(tools=[tool], agent=agent, verbose=True)
 
 
 def create_research_agent():
-    system_prompt = """You are an expert research-based note-taking assistant that creates comprehensive notes with proper citations.
+    system_prompt = f"""You are an expert research-based note-taking assistant that creates comprehensive notes with proper citations.
+
+{cot_planning_template}
 
 INSTRUCTIONS:
 1. Research the topic thoroughly using web search for up-to-date information
@@ -75,24 +221,39 @@ INSTRUCTIONS:
 5. Format using markdown for readability, including proper citation format
 6. For scientific topics, include recent research findings when applicable
 
-When returning your notes, use the following structure:
-- First explain your research methodology
-- Then provide the complete formatted notes with citations
-- End with a bibliography or reference section
+When returning your notes, use the structured output format with these fields:
+- planning_process: Detailed explanation of your planning and research methodology
+- formatted_notes: Complete formatted notes with citations
+- bibliography: Bibliography or reference section
 """
 
     prompt = ChatPromptTemplate.from_messages([
         ("system", system_prompt),
-        MessagesPlaceholder(variable_name="messages")
+        MessagesPlaceholder(variable_name="messages"),
+        MessagesPlaceholder(variable_name="agent_scratchpad"),
     ])
 
-    agent = create_react_agent(llm, tools, prompt=prompt)
+    llm_with_tools = llm.bind_functions([tool, ResearchResponse])
 
-    return agent
+    agent = (
+        {
+            "messages": lambda x: x["messages"],
+            "agent_scratchpad": lambda x: format_to_openai_function_messages(
+                x["intermediate_steps"]
+            ),
+        }
+        | prompt
+        | llm_with_tools
+        | parse_research_output
+    )
+
+    return AgentExecutor(tools=[tool], agent=agent, verbose=True)
 
 
 def create_step_agent():
-    system_prompt = """You are an expert step-by-step problem-solving assistant that breaks down complex problems.
+    system_prompt = f"""You are an expert step-by-step problem-solving assistant that breaks down complex problems.
+
+{cot_planning_template}
 
 INSTRUCTIONS:
 1. Break down problems into clear, logical steps on how to solve them
@@ -102,27 +263,40 @@ INSTRUCTIONS:
 5. For equations use latex formatting
 6. Include examples to illustrate concepts when helpful
 
-When returning your solution, use the following structure:
-- First identify the type of problem and key concepts involved
-- Then present the step-by-step solution with clear explanations
-- Include diagrams or visual aids when applicable
+When returning your solution, use the structured output format with these fields:
+- planning_process: Detailed explanation of your problem-solving plan and approach
+- problem_identification: Type of problem and key concepts involved
+- step_solution: Step-by-step solution with clear explanations
+- visual_aids: Diagrams or visual aids when applicable (optional)
 """
 
     prompt = ChatPromptTemplate.from_messages([
         ("system", system_prompt),
-        MessagesPlaceholder(variable_name="messages")
+        MessagesPlaceholder(variable_name="messages"),
+        MessagesPlaceholder(variable_name="agent_scratchpad"),
     ])
 
-    # Create the agent
-    agent = create_react_agent(llm, tools, prompt=prompt)
+    llm_with_tools = llm.bind_functions([tool, StepResponse])
 
-    return agent
+    agent = (
+        {
+            "messages": lambda x: x["messages"],
+            "agent_scratchpad": lambda x: format_to_openai_function_messages(
+                x["intermediate_steps"]
+            ),
+        }
+        | prompt
+        | llm_with_tools
+        | parse_step_output
+    )
 
-# Create diagram-generating agent
+    return AgentExecutor(tools=[tool], agent=agent, verbose=True)
 
 
 def create_diagram_agent():
-    system_prompt = """You are an expert diagram-generating assistant that creates clear, informative diagrams.
+    system_prompt = f"""You are an expert diagram-generating assistant that creates clear, informative diagrams.
+
+{cot_planning_template}
 
 INSTRUCTIONS:
 1. Research the topic thoroughly using your knowledge or web search when necessary
@@ -132,27 +306,40 @@ INSTRUCTIONS:
 5. Explain the key components of your diagram
 6. Always verify that your Mermaid syntax is valid
 
-When returning your diagram, use the following structure:
-- First explain your thought process for creating this diagram
-- Then provide the complete Mermaid code
-- Include a brief explanation of how to interpret the diagram
+When returning your diagram, use the structured output format with these fields:
+- planning_process: Detailed explanation of your diagram planning process
+- diagram_type_rationale: Description of why you chose this particular diagram type
+- diagram_code: Complete Mermaid code
+- interpretation: Brief explanation of how to interpret the diagram
 """
 
     prompt = ChatPromptTemplate.from_messages([
         ("system", system_prompt),
-        MessagesPlaceholder(variable_name="messages")
+        MessagesPlaceholder(variable_name="messages"),
+        MessagesPlaceholder(variable_name="agent_scratchpad"),
     ])
 
-    # Create the agent
-    agent = create_react_agent(llm, tools, prompt=prompt)
+    llm_with_tools = llm.bind_functions([tool, DiagramResponse])
 
-    return agent
+    agent = (
+        {
+            "messages": lambda x: x["messages"],
+            "agent_scratchpad": lambda x: format_to_openai_function_messages(
+                x["intermediate_steps"]
+            ),
+        }
+        | prompt
+        | llm_with_tools
+        | parse_diagram_output
+    )
 
-# Create flashcard-generating agent
+    return AgentExecutor(tools=[tool], agent=agent, verbose=True)
 
 
 def create_flashcard_agent():
-    system_prompt = """You are an expert flashcard-generating assistant that creates effective study materials.
+    system_prompt = f"""You are an expert flashcard-generating assistant that creates effective study materials.
+
+{cot_planning_template}
 
 INSTRUCTIONS:
 1. Research the topic thoroughly using your knowledge or web search when necessary
@@ -162,27 +349,40 @@ INSTRUCTIONS:
 5. Organize flashcards by subtopic when applicable
 6. Include a mix of definitional, conceptual, and application questions
 
-When returning your flashcards, use the following structure:
-- First explain your approach to creating these flashcards
-- Then provide the complete set of flashcards in an organized format
-- Include suggestions for effective study techniques using these flashcards
+When returning your flashcards, use the structured output format with these fields:
+- planning_process: Detailed explanation of your planning approach
+- organization_approach: Description of how you've organized the content and why
+- flashcards: Complete set of flashcards in an organized format
+- study_tips: Suggestions for effective study techniques
 """
 
     prompt = ChatPromptTemplate.from_messages([
         ("system", system_prompt),
-        MessagesPlaceholder(variable_name="messages")
+        MessagesPlaceholder(variable_name="messages"),
+        MessagesPlaceholder(variable_name="agent_scratchpad"),
     ])
 
-    # Create the agent
-    agent = create_react_agent(llm, tools, prompt=prompt)
+    llm_with_tools = llm.bind_functions([tool, FlashcardResponse])
 
-    return agent
+    agent = (
+        {
+            "messages": lambda x: x["messages"],
+            "agent_scratchpad": lambda x: format_to_openai_function_messages(
+                x["intermediate_steps"]
+            ),
+        }
+        | prompt
+        | llm_with_tools
+        | parse_flashcard_output
+    )
 
-# Create Feynman technique explanation agent
+    return AgentExecutor(tools=[tool], agent=agent, verbose=True)
 
 
 def create_feynman_agent():
-    system_prompt = """You are an expert Feynman technique assistant that simplifies complex concepts.
+    system_prompt = f"""You are an expert Feynman technique assistant that simplifies complex concepts.
+
+{cot_planning_template}
 
 INSTRUCTIONS:
 1. Research the topic thoroughly using your knowledge or web search when necessary
@@ -192,24 +392,65 @@ INSTRUCTIONS:
 5. Break down complex ideas into their simplest components
 6. Identify and address common misconceptions
 
-When returning your explanation, use the following structure:
-- First identify the core concept to be explained
-- Then provide the simplified explanation using the Feynman technique
-- Include analogies, examples, and visual descriptions
-- End with a brief summary of the key takeaways
+When returning your explanation, use the structured output format with these fields:
+- planning_process: Detailed explanation of your planning process
+- core_concept: Core concept to be explained
+- explanation: Simplified explanation using the Feynman technique
+- examples: Analogies, examples, and visual descriptions
+- summary: Brief summary of the key takeaways
 """
 
     prompt = ChatPromptTemplate.from_messages([
         ("system", system_prompt),
-        MessagesPlaceholder(variable_name="messages")
+        MessagesPlaceholder(variable_name="messages"),
+        MessagesPlaceholder(variable_name="agent_scratchpad"),
     ])
 
-    # Create the agent
-    agent = create_react_agent(llm, tools, prompt=prompt)
+    llm_with_tools = llm.bind_functions([tool, FeynmanResponse])
 
-    return agent
+    agent = (
+        {
+            "messages": lambda x: x["messages"],
+            "agent_scratchpad": lambda x: format_to_openai_function_messages(
+                x["intermediate_steps"]
+            ),
+        }
+        | prompt
+        | llm_with_tools
+        | parse_feynman_output
+    )
+
+    return AgentExecutor(tools=[tool], agent=agent, verbose=True)
 
 
+def create_general_agent():
+
+    system_prompt = f"""You are an expert note-taking assistant that creates clear, concise, and well-structured notes and answer the User's query"""
+
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", system_prompt),
+        MessagesPlaceholder(variable_name="messages"),
+        MessagesPlaceholder(variable_name="agent_scratchpad"),
+    ])
+
+    llm_with_tools = llm.bind_functions([tool, NoteResponse])
+
+    agent = (
+        {
+            "messages": lambda x: x["messages"],
+            "agent_scratchpad": lambda x: format_to_openai_function_messages(
+                x["intermediate_steps"]
+            ),
+        }
+        | prompt
+        | llm_with_tools
+        | parse_note_output
+    )
+
+    return AgentExecutor(tools=[tool], agent=agent, verbose=True)
+
+
+general_agent = create_general_agent()
 note_agent = create_note_taking_agent()
 research_agent = create_research_agent()
 step_agent = create_step_agent()
@@ -218,34 +459,32 @@ flashcard_agent = create_flashcard_agent()
 feynman_agent = create_feynman_agent()
 
 
-def run_research_agent(query, context="", files=[]):
-    return research_agent.invoke({"messages": [("user", query)]})
-
-
-def run_step_agent(query, context="", files=[]):
-    return step_agent.invoke({"messages": [("user", query)]})
-
-
-def run_diagram_agent(query, context="", files=[]):
-    return diagram_agent.invoke({"messages": [("user", query)]})
-
-
-def run_flashcard_agent(query, context="", files=[]):
-    return flashcard_agent.invoke({"messages": [("user", query)]})
-
-
-def run_feynman_agent(query, context="", files=[]):
-    return feynman_agent.invoke({"messages": [("user", query)]})
-
-
-def run_agent(topic_request, file_paths=None, agent=note_agent):
+def run_agent(topic_request, file_paths=None, agent_type="note"):
     """
-    Run the note-taking agent with the given topic and optional files.
+    Run the specified agent with the given topic and optional files.
 
     Args:
-        topic_request (str): The topic to take notes on
+        topic_request (str): The topic to process
         file_paths (list): Optional list of file paths to process
+        agent_type (str): Type of agent to use 
+
+    Returns:
+        dict: Structured output from the agent
     """
+    agent_map = {
+        "note": note_agent,
+        "research": research_agent,
+        "step": step_agent,
+        "diagram": diagram_agent,
+        "flashcard": flashcard_agent,
+        "feynman": feynman_agent,
+        "general": general_agent
+    }
+
+    selected_agent = agent_map.get(agent_type)
+    if not selected_agent:
+        raise ValueError(f"Unknown agent type: {agent_type}")
+
     # Process files if provided
     file_content = ""
     if file_paths:
@@ -253,25 +492,65 @@ def run_agent(topic_request, file_paths=None, agent=note_agent):
             content = process_file(path)
             file_content += f"\nContent from {path}:\n{content}\n"
 
-    # Create the message with file content if available
     if file_content:
-        message_content = f"Please take notes about {topic_request}. Use the following file content as reference:\n\n{file_content}"
+        message_content = f"Please process this topic: {topic_request}. Use the following file content as reference:\n\n{file_content}"
     else:
-        message_content = f"Please take notes about {topic_request}"
+        message_content = f"Please process this topic: {topic_request}"
 
-    # Run the agent with the constructed message
-    for step in agent.stream(
+    result = selected_agent.invoke(
         {
             "messages": [HumanMessage(content=message_content)]
-        },
-        stream_mode="values",
-    ):
-        if "messages" in step and step["messages"]:
-            print(step["messages"][-1].content)
+        }
+    )
+
+    return result
 
 
-run_agent(
-    "Markov Decision Processes (MDPs) in AI with examples and practical applications",
-    file_paths=["/Users/nnagelia/Downloads/14_MDPs_RL.pdf"],
-    agent=diagram_agent
-)
+def display_result(result, agent_type="note"):
+    """
+    Format and display the result based on agent type.
+
+    Args:
+        result (dict): The result from the agent
+        agent_type (str): Type of agent used
+    """
+    print("\n" + "="*50)
+    print(f"FINAL {agent_type.upper()} OUTPUT")
+    print("="*50)
+
+    if agent_type == "diagram":
+        print("\nPLANNING PROCESS:")
+        print(result["planning_process"])
+
+        print("\nDIAGRAM TYPE RATIONALE:")
+        print(result["diagram_type_rationale"])
+
+        print("\nDIAGRAM CODE:")
+        print("```mermaid")
+        print(result["diagram_code"])
+        print("```")
+
+        print("\nINTERPRETATION:")
+        print(result["interpretation"])
+    else:
+        # Display other agent types
+        for key, value in result.items():
+            print(f"\n{key.upper().replace('_', ' ')}:")
+            print(value)
+
+    print("\n" + "="*50)
+
+
+# Example usage
+if __name__ == "__main__":
+    # Example of running the diagram agent
+    topic = "Take detailed notes on the topics in the PDF with all equations "
+    file_path = "/Users/nnagelia/Downloads/14_MDPs_RL.pdf"
+
+    result = run_agent(
+        topic,
+        file_paths=[file_path] if file_path else None,
+        agent_type="note"
+    )
+
+    display_result(result, agent_type="note")
