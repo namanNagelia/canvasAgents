@@ -36,7 +36,8 @@ async def register(user: RegisterSchema):
 
     hashed_password = bcrypt.hashpw(user.password.encode(
         'utf-8'), bcrypt.gensalt()).decode('utf-8')
-    new_user = User(name=user.name, email=user.email, password=hashed_password)
+    new_user = User(name=user.name, email=user.email,
+                    password=hashed_password)
     session.add(new_user)
     session.commit()
     return {"message": "Register successful"}
@@ -53,15 +54,21 @@ async def login(user: LoginSchema, response: Response):
 
     token = jwt.encode({"email": db_user.email}, JWT_SECRET, algorithm="HS256")
 
+    # Set the cookie for browser storage - less secure but works for dev
     response.set_cookie(
         key="access_token",
         value=token,
-        httponly=True,
-        secure=True,
-        samesite="Lax"
+        httponly=False,  # Allow JS access for testing
+        secure=False,    # Allow HTTP for local dev
+        samesite="lax",  # Less restrictive
+        max_age=3600     # 1 hour
     )
 
-    return {"message": "Login successful", "token": token}
+    return {
+        "message": "Login successful",
+        "token": token,
+        "user": {"id": str(db_user.id), "email": db_user.email, "name": db_user.name}
+    }
 
 
 @router.get("/logout")
