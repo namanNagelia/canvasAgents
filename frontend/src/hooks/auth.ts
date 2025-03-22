@@ -7,6 +7,7 @@ export const useAuth = () => {
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [user, setUser] = useState<any>(null);
+  const [bearerToken, setBearerToken] = useState<string | null>(null);
   const navigate = useNavigate();
 
   // Function to check authentication status
@@ -25,12 +26,15 @@ export const useAuth = () => {
 
       if (response.ok) {
         const data = await response.json();
+        console.log(data);
         setIsLoggedIn(true);
         setUser(data.user);
+        setBearerToken(data.bearerToken);
         return true;
       } else {
         setIsLoggedIn(false);
         setUser(null);
+        setBearerToken(null);
         return false;
       }
     } catch (error) {
@@ -43,7 +47,6 @@ export const useAuth = () => {
     }
   };
 
-  // Run auth check on mount and token changes
   useEffect(() => {
     checkAuth();
     // We're checking an httpOnly cookie on the server, not relying on the local cookie
@@ -113,5 +116,13 @@ export const useAuth = () => {
     return await checkAuth();
   };
 
-  return { isLoggedIn, isLoading, user, login, logout, refreshAuth };
+  return {
+    isLoggedIn,
+    isLoading,
+    user,
+    login,
+    logout,
+    refreshAuth,
+    bearerToken,
+  };
 };

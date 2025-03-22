@@ -1,54 +1,14 @@
 import { useState } from "react";
 import { useAuth } from "../hooks/auth";
 import { Button } from "@/components/ui/button";
-
-// Example code snippet to display
-const exampleCodeSnippet = `
-// Example React component
-import { useState, useEffect } from 'react';
-
-function DataFetcher() {
-  const [data, setData] = useState([]);
-  const [loading, setLoading] = useState(true);
-  
-  useEffect(() => {
-    async function fetchData() {
-      try {
-        const response = await fetch('/api/data');
-        const result = await response.json();
-        setData(result);
-      } catch (error) {
-        console.error("Error fetching data:", error);
-      } finally {
-        setLoading(false);
-      }
-    }
-    
-    fetchData();
-  }, []);
-  
-  return (
-    <div>
-      {loading ? (
-        <p>Loading data...</p>
-      ) : (
-        <ul>
-          {data.map(item => (
-            <li key={item.id}>{item.name}</li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
-`;
+import { useNavigate } from "react-router-dom";
 
 export default function Dashboard() {
-  const { logout, isLoggedIn } = useAuth();
+  const { logout, isLoggedIn, bearerToken } = useAuth();
   const [activeTab, setActiveTab] = useState("overview");
-
+  const navigate = useNavigate();
   if (!isLoggedIn) {
-    return null; // Will be handled by the ProtectedRoute
+    return null;
   }
 
   return (
@@ -92,6 +52,7 @@ export default function Dashboard() {
                 <h2 className="text-lg font-medium mb-4">
                   Welcome to Your Dashboard
                 </h2>
+                <p>Bearer Token: {bearerToken}</p>
                 <p className="text-gray-600 mb-4">
                   This is your personal dashboard where you can manage your
                   projects and settings.
@@ -130,9 +91,7 @@ export default function Dashboard() {
               <div>
                 <h2 className="text-lg font-medium mb-4">Example Code</h2>
                 <div className="bg-gray-900 text-gray-100 p-4 rounded-md overflow-auto">
-                  <pre className="whitespace-pre-wrap text-sm font-mono">
-                    {exampleCodeSnippet}
-                  </pre>
+                  <pre className="whitespace-pre-wrap text-sm font-mono"></pre>
                 </div>
                 <div className="mt-6">
                   <h3 className="font-medium mb-2">Example API Endpoints</h3>

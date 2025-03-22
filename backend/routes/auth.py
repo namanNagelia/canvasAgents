@@ -8,7 +8,6 @@ import bcrypt
 from sqlalchemy.orm import sessionmaker
 from db import User, session
 from controller.validateJWT import validateCookie, validateBearer
-from tavily import TavilyClient
 
 load_dotenv()
 router = fastapi.APIRouter()
@@ -79,6 +78,7 @@ async def logout(response: Response):
 @router.get("/protected")
 async def protected(request: Request):
     res = validateCookie(request)
+    bearerToken = request.cookies.get("access_token")
     if not res["status"]:
         raise HTTPException(status_code=401, detail=res.get(
             "message", "Unauthorized"))
@@ -89,7 +89,7 @@ async def protected(request: Request):
     if not db_user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    return {"message": "Protected route accessed successfully", "user": {"id": str(db_user.id), "email": db_user.email, "name": db_user.name}}
+    return {"message": "Protected route accessed successfully", "user": {"id": str(db_user.id), "email": db_user.email, "name": db_user.name}, "bearerToken": bearerToken}
 
 
 @router.get("/protected-bearer")

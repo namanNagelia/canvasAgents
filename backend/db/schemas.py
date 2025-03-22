@@ -29,6 +29,11 @@ class User(Base):
     email = Column(String, unique=True, nullable=False)
     password = Column(String, nullable=False)
 
+    # Add this line to establish the bidirectional relationship
+    sessions = relationship("LLMSession", back_populates="user")
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow)
+
 
 class LLMSession(Base):
     __tablename__ = "llm_sessions"
@@ -36,7 +41,6 @@ class LLMSession(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey(
         "users.id"), nullable=False)
-    session_id = Column(String, nullable=False)
     # List of {"request": "...", "response": {...}}
     conversation = Column(JSONB, default=[])
     files = relationship("UploadedFile", back_populates="session")
@@ -55,7 +59,6 @@ class UploadedFile(Base):
     session = relationship("LLMSession", back_populates="files")
     base64 = Column(String, nullable=False)
     fileType = Column(String, nullable=False)
-    session = relationship("LLMSession", back_populates="files")
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow)
 
