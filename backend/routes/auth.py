@@ -54,14 +54,13 @@ async def login(user: LoginSchema, response: Response):
 
     token = jwt.encode({"email": db_user.email}, JWT_SECRET, algorithm="HS256")
 
-    # Set the cookie for browser storage - less secure but works for dev
     response.set_cookie(
         key="access_token",
         value=token,
-        httponly=False,  # Allow JS access for testing
-        secure=False,    # Allow HTTP for local dev
-        samesite="lax",  # Less restrictive
-        max_age=3600     # 1 hour
+        httponly=False,
+        secure=False,
+        samesite="lax",
+        max_age=3600 * 24 * 30
     )
 
     return {
