@@ -8,6 +8,7 @@ import bcrypt
 from sqlalchemy.orm import sessionmaker
 from db import User, session
 from controller.validateJWT import validateCookie, validateBearer
+from tavily import TavilyClient
 
 load_dotenv()
 router = fastapi.APIRouter()

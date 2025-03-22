@@ -1,6 +1,19 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+@font-face {
+  font-family: Raleway;
+  src: url("./assets//fonts//Raleway-Bold.ttf");
+}
+@font-face {
+  font-family: Bitter;
+  src: url("./assets//fonts//Bitter-Regular.ttf");
+}
+@theme {
+  --font-family-sans: Raleway, sans-serif;
+  --font-raleway: Raleway, sans-serif;
+  --font-bitter: Bitter, serif;
+}
 @custom-variant dark (&:is(.dark *));
 
 :root {

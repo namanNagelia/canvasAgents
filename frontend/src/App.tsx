@@ -32,7 +32,7 @@ function App() {
   return (
     <div className="w-full min-h-screen flex items-center justify-center bg-gray-500">
       <div className="text-center">
-        <h1>Agentic AI Canvas</h1>
+        <h1 className="font-raleway">Agentic AI Canvas</h1>
         <div className="card">
           {loading ? (
             <p>Loading...</p>
