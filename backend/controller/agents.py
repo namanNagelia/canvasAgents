@@ -701,37 +701,37 @@ def display_result(result, agent_type="note"):
     print("\n" + "="*50)
 
 
-# # Update the test function to demonstrate conversation memory
-# if __name__ == "__main__":
-#     # Start with empty chat history
-#     chat_history = []
+# Update the test function to demonstrate conversation memory
+if __name__ == "__main__":
+    # Start with empty chat history
+    chat_history = []
 
-#     # First question
-#     topic = "Explain to me machine learning with pytorch."
-#     # file_path = "/Users/nnagelia/Downloads/8.2 Particle Motion Integrals 2021.docx _ Schoology.pdf"
-#     result, chat_history = run_agent(
-#         topic,
-#         agent_type="general",
-#         chat_history=chat_history
-#     )
-#     print("Result")
-#     print(result)
-#     print("Chat history")
-#     print(chat_history)
+    # First question
+    topic = "Explain to me machine learning with pytorch."
+    # file_path = "/Users/nnagelia/Downloads/8.2 Particle Motion Integrals 2021.docx _ Schoology.pdf"
+    result, chat_history = run_agent(
+        topic,
+        agent_type="general",
+        chat_history=chat_history
+    )
+    print("Result")
+    print(result)
+    print("Chat history")
+    print(chat_history)
 
-    # topic = "Now how do i code this?"
-    # result, chat_history = run_agent(
-    #     topic,
-    #     agent_type="step",
-    #     chat_history=chat_history
-    # )
-    # print(result)
-    # print(chat_history)
-    # topic = "What did i just ask you to do?"
-    # result, chat_history = run_agent(
-    #     topic,
-    #     agent_type="general",
-    #     chat_history=chat_history
-    # )
-    # print(result)
-    # print(chat_history)
+    topic = "Now how do i code this?"
+    result, chat_history = run_agent(
+        topic,
+        agent_type="step",
+        chat_history=chat_history
+    )
+    print(result)
+    print(chat_history)
+    topic = "What did i just ask you to do?"
+    result, chat_history = run_agent(
+        topic,
+        agent_type="general",
+        chat_history=chat_history
+    )
+    print(result)
+    print(chat_history)

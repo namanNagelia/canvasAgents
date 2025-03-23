@@ -15,6 +15,7 @@ import base64
 from langchain_core.messages import HumanMessage, AIMessage
 import json
 import copy
+from typing import Any, Dict, List
 load_dotenv()
 router = fastapi.APIRouter()
 
@@ -92,6 +93,44 @@ async def upload_file(request: Request):
             status_code=500, detail=f"Error uploading file: {str(e)}")
 
 
+def clean_dict(data: Any) -> Any:
+    """
+    Recursively clean a dictionary or list to make it JSON-serializable.
+    Handles HumanMessage objects and other non-serializable types.
+    """
+    if isinstance(data, dict):
+        cleaned = {}
+        for key, value in data.items():
+            if hasattr(value, '__dict__'):  # Handle objects like HumanMessage
+                cleaned[key] = clean_dict(value.__dict__)
+            elif isinstance(value, (dict, list)):
+                cleaned[key] = clean_dict(value)
+            elif isinstance(value, (str, int, float, bool)) or value is None:
+                cleaned[key] = value
+            else:
+                # Convert other non-serializable objects to string as fallback
+                cleaned[key] = str(value)
+        # For HumanMessage-like objects, add default fields if missing
+        if 'content' in cleaned and 'type' not in cleaned:
+            cleaned.update({
+                "type": "human",
+                "additional_kwargs": cleaned.get("additional_kwargs", {}),
+                "response_metadata": cleaned.get("response_metadata", {}),
+                "name": None,
+                "id": None,
+                "example": False
+            })
+        return cleaned
+    elif isinstance(data, list):
+        return [clean_dict(item) for item in data]
+    elif hasattr(data, '__dict__'):  # Handle objects directly
+        return clean_dict(data.__dict__)
+    elif isinstance(data, (str, int, float, bool)) or data is None:
+        return data
+    else:
+        return str(data)  # Fallback for other types
+
+
 @router.post("/chat")
 async def chat(request: Request):
     """
@@ -119,7 +158,9 @@ async def chat(request: Request):
         ai_response = copy.deepcopy(llm_session_obj.ai_response)
         user_input = copy.deepcopy(llm_session_obj.user_input)
         chat_history = copy.deepcopy(llm_session_obj.chat_history)
+        print("chat_history: ", chat_history)
         file_contents = {}
+        print("Got initial data")
         if file_ids:
             uploaded_files = session.query(UploadedFile).filter(
                 UploadedFile.id.in_([uuid.UUID(fid) for fid in file_ids])
@@ -139,7 +180,6 @@ async def chat(request: Request):
                 session_id=session_id,
                 chat_history=chat_history
             )
-            print(result)
         else:
             print("Running agent")
             result, updated_lang_history = run_agent_file_content(
@@ -147,27 +187,37 @@ async def chat(request: Request):
                 file_content=None,
                 agent_type=agent_type,
                 session_id=session_id,
-                chat_history=[]
+                chat_history=chat_history
             )
-            print(result)
-        return {
-            "result": result,
-            "updated_lang_history": updated_lang_history
-        }
         user_input.append({"agent_type": agent_type, "message": message})
         ai_response.append({"agent_type": agent_type, "message": result})
-        # llm_session_obj.chat_history = updated_lang_history
 
-        # session.commit()
-
-        # session.refresh(llm_session_obj)
-
-        return {
-            "session_id": session_id,
-            "message": user_input,
-            "response": ai_response,
-            "chat_history": updated_lang_history
+        # Create the object and clean it
+        obj = {
+            "id": str(llm_session_obj.id),
+            "user_id": str(llm_session_obj.user_id),
+            "user_input": user_input,
+            "ai_response": ai_response,
+            "chat_history": updated_lang_history,
         }
+
+        # Clean the dictionary to ensure JSON-serializability
+        cleaned_obj = clean_dict(obj)
+
+        print("Cleaned obj: ", cleaned_obj)
+        print(json.dumps(cleaned_obj, indent=4))
+
+        # Assign cleaned values to the database object
+        llm_session_obj.user_input = cleaned_obj["user_input"]
+        llm_session_obj.ai_response = cleaned_obj["ai_response"]
+        llm_session_obj.chat_history = cleaned_obj["chat_history"]
+        session.add(llm_session_obj)
+
+        session.commit()
+
+        session.refresh(llm_session_obj)
+
+        return cleaned_obj
     except Exception as e:
         session.rollback()
         print(f"Error in chat endpoint: {str(e)}")
