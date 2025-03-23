@@ -9,15 +9,15 @@ from sqlalchemy.orm import sessionmaker
 from db import User, session, LLMSession, UploadedFile
 from controller.validateJWT import validateCookie, validateBearer
 from controller.utilities import process_file
-from controller.agents import run_agent, display_result
+from controller.agents import run_agent, display_result, run_agent_file_content
 import uuid
 import base64
 from langchain_core.messages import HumanMessage, AIMessage
-
+import json
+import copy
 load_dotenv()
 router = fastapi.APIRouter()
 
-# Create a dictionary to store chat histories by session
 session_chat_histories = {}
 
 
@@ -96,37 +96,94 @@ async def upload_file(request: Request):
 async def chat(request: Request):
     """
     This route is used to chat with the agent
-    It takes in a request with the following body:
-    {
-        "session_id": "session_id",
-        "message": "message",
-        "agent_type": "agent_type",
-        "file": file
-    }
-
-    agent_type can be one of the following:
-    "note", "research", "step", "diagram", "flashcard", "feynman", "general"
-
-    It will 1: Get the session, and past chats 2: Send the message with agent type and any files uploaded for that one speicifc chat, and it will return the response. 
-    For chat history, user input gets updated with each message, and the ai response is updated with each response
-    when rendering the chat history, start with the first element of user input then render ai response one by one
-    ai response format: [ {"agent_type", "response}]
-    user input format: [ {"agent_type", "message"}]
-    Files are shown on the left of the chat history in a file section
-    paste the llm chat history into the chat history section
     """
-    data = await request.json()
-    session_id = data.get("session_id")
-    message = data.get("message")
-    agent_type = data.get("agent_type")
-    file = data.get("file")
+    try:
+        data = await request.json()
+        session_id = data.get("session_id")
+        message = data.get("message")
+        agent_type = data.get("agent_type", "general")
+        file_ids = data.get("file_ids", [])
 
-    # Get the session
-    session = session.query(LLMSession).filter(
-        LLMSession.id == session_id).first()
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
+        auth_result = validateBearer(request)
+        if not auth_result["status"]:
+            raise HTTPException(status_code=401, detail="Unauthorized")
 
-    past_chats = session.chat_history
+        llm_session_obj = session.query(LLMSession).filter(
+            LLMSession.id == uuid.UUID(session_id)
+        ).first()
 
-    return {"session_id": session_id, "message": message}
+        if not llm_session_obj:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        session.refresh(llm_session_obj)
+        ai_response = copy.deepcopy(llm_session_obj.ai_response)
+        user_input = copy.deepcopy(llm_session_obj.user_input)
+        chat_history = copy.deepcopy(llm_session_obj.chat_history)
+        file_contents = {}
+        if file_ids:
+            uploaded_files = session.query(UploadedFile).filter(
+                UploadedFile.id.in_([uuid.UUID(fid) for fid in file_ids])
+            ).all()
+
+            for file in uploaded_files:
+                file_contents[str(file.id)] = file.content
+
+        if file_contents:
+            print("Running agent with file content")
+            context_message = message + "\n\n" + \
+                "\n\n".join(file_contents.values())
+            result, updated_lang_history = run_agent_file_content(
+                context_message,
+                file_content=None,  # Not using this
+                agent_type=agent_type,
+                session_id=session_id,
+                chat_history=chat_history
+            )
+            print(result)
+        else:
+            print("Running agent")
+            result, updated_lang_history = run_agent_file_content(
+                message,
+                file_content=None,
+                agent_type=agent_type,
+                session_id=session_id,
+                chat_history=[]
+            )
+            print(result)
+        return {
+            "result": result,
+            "updated_lang_history": updated_lang_history
+        }
+        user_input.append({"agent_type": agent_type, "message": message})
+        ai_response.append({"agent_type": agent_type, "message": result})
+        # llm_session_obj.chat_history = updated_lang_history
+
+        # session.commit()
+
+        # session.refresh(llm_session_obj)
+
+        return {
+            "session_id": session_id,
+            "message": user_input,
+            "response": ai_response,
+            "chat_history": updated_lang_history
+        }
+    except Exception as e:
+        session.rollback()
+        print(f"Error in chat endpoint: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+
+
+"""
+
+ON UI:
+1. Create new session
+2, You can upload a file on the sidebar, it will use /upload to upload it
+3. You can chat with the agent, it will use /chat to chat with the agent. If you select files from the upload section, it will use /chat with the file paths
+4. When you click on the chat, it will show the chat history on the left and the chat on the right
+5. When you send a message, it will use /chat to get the response
+6. The response will be shown on the right
+7. The chat history will be shown on the left
+
+
+"""

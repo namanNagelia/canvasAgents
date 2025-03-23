@@ -41,8 +41,8 @@ class LLMSession(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey(
         "users.id"), nullable=False)
-    user_input = Column(JSONB, default=[])
-    ai_response = Column(JSONB, default=[])
+    user_input = Column(JSONB, default=lambda: [])
+    ai_response = Column(JSONB, default=lambda: [])
     chat_history = Column(JSONB, default=[])
     # List of {"request": "...", "response": {...}}
     files = relationship("UploadedFile", back_populates="session")

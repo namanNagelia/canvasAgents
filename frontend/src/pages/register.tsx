@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/auth";
-import loginImage from "@/../public/loginPhoto.avif";
+import loginImage from "@/images/loginPhoto.avif";
 
 // Import shadcn components
 import { Button } from "@/components/ui/button";

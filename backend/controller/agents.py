@@ -7,7 +7,7 @@ from langgraph.prebuilt import create_react_agent
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import HumanMessage, AIMessage, FunctionMessage
 from langchain_tavily import TavilySearch
-from utilities import process_file
+from .utilities import process_file
 import json
 from typing import List, Dict, Any, Optional
 from langchain_core.pydantic_v1 import BaseModel, Field
@@ -119,8 +119,8 @@ class FlashcardResponse(BaseModel):
         description="Planning approach to creating these flashcards")
     organization_approach: str = Field(
         description="How the content is organized and why")
-    flashcards: str = Field(
-        description="Complete set of flashcards in an organized format")
+    flashcards: List[Dict[str, str]] = Field(
+        description="Complete set of flashcards in an organized format with 'front' and 'back' keys")
     study_tips: str = Field(
         description="Suggestions for effective study techniques")
 
@@ -239,7 +239,7 @@ INSTRUCTIONS:
 
 When returning your notes, use the structured output format with these fields:
 - planning_process: Detailed explanation of your planning and research methodology
-- formatted_notes: Complete formatted notes with citations
+- formatted_notes: Complete formatted notes with citations in markdown format
 - bibliography: Bibliography or reference section
 """
 
@@ -282,7 +282,7 @@ INSTRUCTIONS:
 When returning your solution, use the structured output format with these fields:
 - planning_process: Detailed explanation of your problem-solving plan and approach
 - problem_identification: Type of problem and key concepts involved
-- step_solution: Step-by-step solution with clear explanations
+- step_solution: Step-by-step solution with clear explanations in markdown format
 - visual_aids: Diagrams or visual aids when applicable (optional)
 """
 
@@ -325,7 +325,7 @@ INSTRUCTIONS:
 When returning your diagram, use the structured output format with these fields:
 - planning_process: Detailed explanation of your diagram planning process
 - diagram_type_rationale: Description of why you chose this particular diagram type
-- diagram_code: Complete Mermaid code
+- diagram_code: Complete Mermaid code so i can render it in markdown js.
 - interpretation: Brief explanation of how to interpret the diagram
 """
 
@@ -368,7 +368,7 @@ INSTRUCTIONS:
 When returning your flashcards, use the structured output format with these fields:
 - planning_process: Detailed explanation of your planning approach
 - organization_approach: Description of how you've organized the content and why
-- flashcards: Complete set of flashcards in an organized format
+- flashcards: Complete set of flashcards in an organized format in json with two keys front: "question", back: "answer"
 - study_tips: Suggestions for effective study techniques
 """
 
@@ -413,7 +413,8 @@ When returning your explanation, use the structured output format with these fie
 - core_concept: Core concept to be explained
 - explanation: Simplified explanation using the Feynman technique
 - examples: Analogies, examples, and visual descriptions
-- summary: Brief summary of the key takeaways
+- summary: Brief summary of the key takeaways 
+-all in markdown format
 """
 
     prompt = ChatPromptTemplate.from_messages([
@@ -455,7 +456,7 @@ def create_general_agent():
         MessagesPlaceholder(variable_name="agent_scratchpad"),
     ])
 
-    llm_with_tools = llm.bind_tools([tool, GeneralResponse])
+    llm_with_tools = llm.bind_functions([tool, GeneralResponse])
 
     agent = (
         {
@@ -512,7 +513,14 @@ def run_agent(topic_request, file_paths=None, agent_type="note", session_id=None
     if chat_history is None:
         chat_history = []
 
-    # Process files if provided
+    # Convert JSON chat history to LangChain message objects
+    langchain_messages = []
+    for message in chat_history:
+        if message['type'] == 'human':
+            langchain_messages.append(HumanMessage(content=message['content']))
+        elif message['type'] == 'ai':
+            langchain_messages.append(AIMessage(content=message['content']))
+
     file_content = ""
     if file_paths:
         for path in file_paths:
@@ -524,26 +532,151 @@ def run_agent(topic_request, file_paths=None, agent_type="note", session_id=None
     else:
         message_content = f"Please process this topic: {topic_request}"
 
-    # Create a new message for the current request
+    # Create new human message
     new_message = HumanMessage(content=message_content)
 
-    # Combine history with the new message
-    messages = chat_history + [new_message]
+    # Add to LangChain messages list for the agent
+    messages = langchain_messages + [new_message]
 
-    # Invoke the agent with the combined messages
+    # Invoke the agent
     result = selected_agent.invoke(
         {
             "messages": messages
         }
     )
 
-    # Update chat history with the new exchange
-    chat_history.append(new_message)
+    # Add the new human message to the JSON chat history
+    chat_history.append({"type": "human", "content": message_content})
 
-    # Add the AI's response to the chat history (for next time)
-    if isinstance(result, dict) and "output" in result:
-        ai_response = AIMessage(content=str(result))
-        chat_history.append(ai_response)
+    # Add the AI response to the JSON chat history
+    if isinstance(result, dict):
+        # Clean up the result dictionary to create a more readable response
+        cleaned_result = {}
+        for key, value in result.items():
+            # Skip the 'messages' field or convert it to a more readable format
+            if key == 'messages':
+                # Extract just the content from each message
+                message_contents = []
+                if isinstance(value, list):
+                    for msg in value:
+                        if hasattr(msg, 'content'):
+                            message_contents.append(
+                                f"{msg.__class__.__name__}: {msg.content}")
+                        else:
+                            message_contents.append(str(msg))
+                    cleaned_result[key] = message_contents
+            else:
+                cleaned_result[key] = value
+
+        # Format the result as a string representation for chat history
+        ai_content = ""
+        if "answer" in cleaned_result:
+            ai_content = cleaned_result["answer"]
+        elif "output" in cleaned_result:
+            ai_content = cleaned_result["output"]
+        else:
+            # If there's no clear output, use the entire cleaned result
+            ai_content = str(cleaned_result)
+
+        # Add formatted AI message to chat history
+        chat_history.append({"type": "ai", "content": ai_content})
+
+    # Return both the result and updated history
+    return result, chat_history
+
+
+def run_agent_file_content(topic_request, file_content=None, agent_type="note", session_id=None, chat_history=None):
+    """
+    Run the specified agent with the given topic and optional files, maintaining conversation history.
+
+    Args:
+        topic_request (str): The topic to process
+        file_contaent (list): Optional list of file content after uploading
+        agent_type (str): Type of agent to use 
+        session_id (str): Optional session ID for persistence
+        chat_history (list): Optional list of previous messages
+
+    Returns:
+        dict: Structured output from the agent
+    """
+    agent_map = {
+        "note": note_agent,
+        "research": research_agent,
+        "step": step_agent,
+        "diagram": diagram_agent,
+        "flashcard": flashcard_agent,
+        "feynman": feynman_agent,
+        "general": general_agent
+    }
+
+    selected_agent = agent_map.get(agent_type)
+    if not selected_agent:
+        raise ValueError(f"Unknown agent type: {agent_type}")
+
+    if chat_history is None:
+        chat_history = []
+
+    # Convert JSON chat history to LangChain message objects
+    langchain_messages = []
+    for message in chat_history:
+        if message['type'] == 'human':
+            langchain_messages.append(HumanMessage(content=message['content']))
+        elif message['type'] == 'ai':
+            langchain_messages.append(AIMessage(content=message['content']))
+
+    if file_content:
+        message_content = f"Please process this topic: {topic_request}. Use the following file content as reference:\n\n{file_content}"
+    else:
+        message_content = f"Please process this topic: {topic_request}"
+
+    # Create new human message
+    new_message = HumanMessage(content=message_content)
+
+    # Add to LangChain messages list for the agent
+    messages = langchain_messages + [new_message]
+
+    # Invoke the agent
+    result = selected_agent.invoke(
+        {
+            "messages": messages
+        }
+    )
+
+    # Add the new human message to the JSON chat history
+    chat_history.append({"type": "human", "content": message_content})
+
+    # Add the AI response to the JSON chat history
+    if isinstance(result, dict):
+        # Clean up the result dictionary to create a more readable response
+        cleaned_result = {}
+        for key, value in result.items():
+            # Skip the 'messages' field or convert it to a more readable format
+            if key == 'messages':
+                # Extract just the content from each message
+                message_contents = []
+                if isinstance(value, list):
+                    for msg in value:
+                        if hasattr(msg, 'content'):
+                            message_contents.append(
+                                f"{msg.__class__.__name__}: {msg.content}")
+                        else:
+                            message_contents.append(str(msg))
+                    cleaned_result[key] = message_contents
+            else:
+                cleaned_result[key] = value
+
+        # Format the result as a string representation for chat history
+        ai_content = ""
+        if "answer" in cleaned_result:
+            ai_content = cleaned_result["answer"]
+        elif "output" in cleaned_result:
+            ai_content = cleaned_result["output"]
+        else:
+            # If there's no clear output, use the entire cleaned result
+            ai_content = str(cleaned_result)
+
+        # Add formatted AI message to chat history
+        chat_history.append({"type": "ai", "content": ai_content})
 
     # Return both the result and updated history
     return result, chat_history
@@ -568,46 +701,37 @@ def display_result(result, agent_type="note"):
     print("\n" + "="*50)
 
 
-# Update the test function to demonstrate conversation memory
-if __name__ == "__main__":
-    # Start with empty chat history
-    chat_history = []
+# # Update the test function to demonstrate conversation memory
+# if __name__ == "__main__":
+#     # Start with empty chat history
+#     chat_history = []
 
-    # First question
-    topic = "Explain to me how pytorch and ML Works "
-    result, chat_history = run_agent(
-        topic,
-        file_paths=None,
-        agent_type="general",
-        chat_history=chat_history
-    )
-    display_result(result, agent_type="general")
+#     # First question
+#     topic = "Explain to me machine learning with pytorch."
+#     # file_path = "/Users/nnagelia/Downloads/8.2 Particle Motion Integrals 2021.docx _ Schoology.pdf"
+#     result, chat_history = run_agent(
+#         topic,
+#         agent_type="general",
+#         chat_history=chat_history
+#     )
+#     print("Result")
+#     print(result)
+#     print("Chat history")
+#     print(chat_history)
 
-    # Follow-up question (should reference the prior conversation)
-    topic = "Explain to me the practical applications of what i just asked you"
-    result, chat_history = run_agent(
-        topic,
-        file_paths=None,
-        agent_type="general",
-        chat_history=chat_history
-    )
-    display_result(result, agent_type="general")
-
-    topic = "Now give me a step by step tutorial on how to use it"
-    result, chat_history = run_agent(
-        topic,
-        file_paths=None,
-        agent_type="step",
-        chat_history=chat_history
-    )
-    display_result(result, agent_type="step")
-
-    topic = "Finally, show me a diagram of the concept"
-    result, chat_history = run_agent(
-        topic,
-        file_paths=None,
-        agent_type="diagram",
-        chat_history=chat_history
-    )
-    display_result(result, agent_type="diagram")
-    print("Chat history: ", chat_history)
+    # topic = "Now how do i code this?"
+    # result, chat_history = run_agent(
+    #     topic,
+    #     agent_type="step",
+    #     chat_history=chat_history
+    # )
+    # print(result)
+    # print(chat_history)
+    # topic = "What did i just ask you to do?"
+    # result, chat_history = run_agent(
+    #     topic,
+    #     agent_type="general",
+    #     chat_history=chat_history
+    # )
+    # print(result)
+    # print(chat_history)
