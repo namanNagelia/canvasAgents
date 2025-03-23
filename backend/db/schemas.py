@@ -41,8 +41,10 @@ class LLMSession(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey(
         "users.id"), nullable=False)
+    user_input = Column(JSONB, default=[])
+    ai_response = Column(JSONB, default=[])
+    chat_history = Column(JSONB, default=[])
     # List of {"request": "...", "response": {...}}
-    conversation = Column(JSONB, default=[])
     files = relationship("UploadedFile", back_populates="session")
     user = relationship("User", back_populates="sessions")
     created_at = Column(DateTime, default=datetime.utcnow)

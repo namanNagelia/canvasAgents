@@ -561,25 +561,9 @@ def display_result(result, agent_type="note"):
     print(f"FINAL {agent_type.upper()} OUTPUT")
     print("="*50)
 
-    if agent_type == "diagram":
-        print("\nPLANNING PROCESS:")
-        print(result["planning_process"])
-
-        print("\nDIAGRAM TYPE RATIONALE:")
-        print(result["diagram_type_rationale"])
-
-        print("\nDIAGRAM CODE:")
-        print("```mermaid")
-        print(result["diagram_code"])
-        print("```")
-
-        print("\nINTERPRETATION:")
-        print(result["interpretation"])
-    else:
-        # Display other agent types
-        for key, value in result.items():
-            print(f"\n{key.upper().replace('_', ' ')}:")
-            print(value)
+    for key, value in result.items():
+        print(f"\n{key.upper().replace('_', ' ')}:")
+        print(value)
 
     print("\n" + "="*50)
 
@@ -599,30 +583,31 @@ if __name__ == "__main__":
     )
     display_result(result, agent_type="general")
 
-    # # Follow-up question (should reference the prior conversation)
-    # topic = "Explain to me the practical applications of what i just asked you"
-    # result, chat_history = run_agent(
-    #     topic,
-    #     file_paths=None,
-    #     agent_type="general",
-    #     chat_history=chat_history
-    # )
-    # display_result(result, agent_type="general")
+    # Follow-up question (should reference the prior conversation)
+    topic = "Explain to me the practical applications of what i just asked you"
+    result, chat_history = run_agent(
+        topic,
+        file_paths=None,
+        agent_type="general",
+        chat_history=chat_history
+    )
+    display_result(result, agent_type="general")
 
-    # topic = "Now give me a step by step tutorial on how to use it"
-    # result, chat_history = run_agent(
-    #     topic,
-    #     file_paths=None,
-    #     agent_type="step",
-    #     chat_history=chat_history
-    # )
-    # display_result(result, agent_type="step")
+    topic = "Now give me a step by step tutorial on how to use it"
+    result, chat_history = run_agent(
+        topic,
+        file_paths=None,
+        agent_type="step",
+        chat_history=chat_history
+    )
+    display_result(result, agent_type="step")
 
-    # topic = "Finally, show me a diagram of the concept"
-    # result, chat_history = run_agent(
-    #     topic,
-    #     file_paths=None,
-    #     agent_type="diagram",
-    #     chat_history=chat_history
-    # )
-    # display_result(result, agent_type="diagram")
+    topic = "Finally, show me a diagram of the concept"
+    result, chat_history = run_agent(
+        topic,
+        file_paths=None,
+        agent_type="diagram",
+        chat_history=chat_history
+    )
+    display_result(result, agent_type="diagram")
+    print("Chat history: ", chat_history)

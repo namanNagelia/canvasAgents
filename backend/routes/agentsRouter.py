@@ -90,3 +90,43 @@ async def upload_file(request: Request):
         session.rollback()
         raise HTTPException(
             status_code=500, detail=f"Error uploading file: {str(e)}")
+
+
+@router.post("/chat")
+async def chat(request: Request):
+    """
+    This route is used to chat with the agent
+    It takes in a request with the following body:
+    {
+        "session_id": "session_id",
+        "message": "message",
+        "agent_type": "agent_type",
+        "file": file
+    }
+
+    agent_type can be one of the following:
+    "note", "research", "step", "diagram", "flashcard", "feynman", "general"
+
+    It will 1: Get the session, and past chats 2: Send the message with agent type and any files uploaded for that one speicifc chat, and it will return the response. 
+    For chat history, user input gets updated with each message, and the ai response is updated with each response
+    when rendering the chat history, start with the first element of user input then render ai response one by one
+    ai response format: [ {"agent_type", "response}]
+    user input format: [ {"agent_type", "message"}]
+    Files are shown on the left of the chat history in a file section
+    paste the llm chat history into the chat history section
+    """
+    data = await request.json()
+    session_id = data.get("session_id")
+    message = data.get("message")
+    agent_type = data.get("agent_type")
+    file = data.get("file")
+
+    # Get the session
+    session = session.query(LLMSession).filter(
+        LLMSession.id == session_id).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    past_chats = session.chat_history
+
+    return {"session_id": session_id, "message": message}
