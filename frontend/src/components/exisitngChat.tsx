@@ -1,13 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/auth";
-import {
-  Search,
-  BookOpen,
-  FileText,
-  Layers,
-  IdCard,
-  Lightbulb,
-} from "lucide-react";
+import { GeneralAgentRender } from "./agentRenders/general";
+import { AGENTS } from "./centerChat";
 
 interface Message {
   type: "human" | "ai";
@@ -43,59 +37,6 @@ interface SessionData {
 interface ExistingChatProps {
   sessionId: string;
 }
-
-// Define AGENTS array if not imported correctly
-export const AGENTS = [
-  {
-    key: "general",
-    name: "General",
-    icon: Search,
-    description: "General assistant",
-    color: "bg-blue-500/30",
-  },
-  {
-    key: "research",
-    name: "Research",
-    icon: Search,
-    description: "In-depth research and citations",
-    color: "bg-slate-500/30",
-  },
-  {
-    key: "notes",
-    name: "Notes",
-    icon: BookOpen,
-    description: "Comprehensive note-taking",
-    color: "bg-emerald-500/30",
-  },
-  {
-    key: "step",
-    name: "Step",
-    icon: Layers,
-    description: "Detailed problem solving",
-    color: "bg-indigo-500/30",
-  },
-  {
-    key: "diagram",
-    name: "Diagram",
-    icon: FileText,
-    description: "Visual concept mapping",
-    color: "bg-amber-500/30",
-  },
-  {
-    key: "flashcard",
-    name: "Flashcards",
-    icon: IdCard,
-    description: "Study material generation",
-    color: "bg-rose-500/30",
-  },
-  {
-    key: "feynman",
-    name: "Feynman",
-    icon: Lightbulb,
-    description: "Simplified explanations",
-    color: "bg-yellow-500/30",
-  },
-];
 
 export const ExistingChat: React.FC<ExistingChatProps> = ({ sessionId }) => {
   const { user, bearerToken, isLoggedIn } = useAuth();
@@ -271,18 +212,32 @@ export const ExistingChat: React.FC<ExistingChatProps> = ({ sessionId }) => {
                   </div>
                 )}
 
-                {message.type === "ai" && (
-                  <div className="flex items-center gap-2 mb-2">
-                    <AgentIcon className="h-5 w-5 opacity-70" />
-                    <span className="font-semibold text-sm">
-                      {agentDetails.name} Agent
-                    </span>
-                  </div>
-                )}
-
-                <pre className="whitespace-pre-wrap break-words text-sm font-sans">
-                  {message.content}
-                </pre>
+                {message.type === "ai" && message.agent_type === "general" ? (
+                  <GeneralAgentRender
+                    message={message}
+                    agentDetails={agentDetails}
+                  />
+                ) : message.type === "ai" &&
+                  message.agent_type !== "general" ? (
+                  <>
+                    <div className="flex items-center gap-2 mb-2">
+                      {
+                        AGENTS.find((agent) => agent.key === message.agent_type)
+                          ?.icon
+                      }
+                      <span className="font-semibold text-sm">
+                        {
+                          AGENTS.find(
+                            (agent) => agent.key === message.agent_type
+                          )?.name
+                        }
+                      </span>
+                    </div>
+                    <pre className="whitespace-pre-wrap break-words text-sm font-sans">
+                      {message.content}
+                    </pre>
+                  </>
+                ) : null}
               </div>
             </div>
           );
