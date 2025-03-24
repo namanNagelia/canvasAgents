@@ -26,7 +26,6 @@ export const useAuth = () => {
 
       if (response.ok) {
         const data = await response.json();
-        console.log(data);
         setIsLoggedIn(true);
         setUser(data.user);
         setBearerToken(data.bearerToken);
