@@ -2,7 +2,12 @@ import React, { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/auth";
 import { GeneralAgentRender } from "./agentRenders/general";
 import { AGENTS } from "./centerChat";
-
+import { NoteAgentRender } from "./agentRenders/note";
+import { ResearchAgentRender } from "./agentRenders/research";
+import { StepAgentRender } from "./agentRenders/step";
+import { MermaidAgentRender } from "./agentRenders/mermaid";
+import { FlashcardsAgentRender } from "./agentRenders/flashcards";
+import { FeynmanAgentRender } from "./agentRenders/feynman";
 interface Message {
   type: "human" | "ai";
   content: string;
@@ -89,7 +94,6 @@ export const ExistingChat: React.FC<ExistingChatProps> = ({ sessionId }) => {
                 agent_type: input.agent_type,
               });
 
-              // Add AI response if exists
               if (sessionDetails.ai_response[index]) {
                 const aiResponse = sessionDetails.ai_response[index];
                 let content = "";
@@ -100,7 +104,6 @@ export const ExistingChat: React.FC<ExistingChatProps> = ({ sessionId }) => {
                   aiResponse.message &&
                   typeof aiResponse.message === "object"
                 ) {
-                  // Create a copy of the message object and remove the 'messages' array
                   const responseWithoutMessages = { ...aiResponse.message };
                   delete responseWithoutMessages.messages;
 
@@ -209,11 +212,48 @@ export const ExistingChat: React.FC<ExistingChatProps> = ({ sessionId }) => {
                 {message.type === "human" && (
                   <div className="flex items-center gap-2 mb-2">
                     <span className="font-semibold text-sm">You</span>
+                    <span className="text-sm text-black font-bitter">
+                      {message.content}
+                    </span>
                   </div>
                 )}
 
                 {message.type === "ai" && message.agent_type === "general" ? (
                   <GeneralAgentRender
+                    message={message}
+                    agentDetails={agentDetails}
+                  />
+                ) : message.type === "ai" && message.agent_type === "note" ? (
+                  <NoteAgentRender
+                    message={message}
+                    agentDetails={agentDetails}
+                  />
+                ) : message.type === "ai" &&
+                  message.agent_type === "research" ? (
+                  <ResearchAgentRender
+                    message={message}
+                    agentDetails={agentDetails}
+                  />
+                ) : message.type === "ai" && message.agent_type === "step" ? (
+                  <StepAgentRender
+                    message={message}
+                    agentDetails={agentDetails}
+                  />
+                ) : message.type === "ai" &&
+                  message.agent_type === "diagram" ? (
+                  <MermaidAgentRender
+                    message={message}
+                    agentDetails={agentDetails}
+                  />
+                ) : message.type === "ai" &&
+                  message.agent_type === "flashcard" ? (
+                  <FlashcardsAgentRender
+                    message={message}
+                    agentDetails={agentDetails}
+                  />
+                ) : message.type === "ai" &&
+                  message.agent_type === "feynman" ? (
+                  <FeynmanAgentRender
                     message={message}
                     agentDetails={agentDetails}
                   />

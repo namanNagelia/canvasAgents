@@ -11,7 +11,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 
-export const GeneralAgentRender = ({
+export const NoteAgentRender = ({
   message,
   agentDetails,
 }: {
@@ -27,22 +27,20 @@ export const GeneralAgentRender = ({
     }
   }
 
-  // Process content to ensure LaTeX is rendered correctly
-  const processContent = (content: string) => {
-    // Replace \[ and \] with $$ for block math
-    return (
-      content
-        .replace(/\\\[/g, "$$")
-        .replace(/\\\]/g, "$$")
-        // Handle inline math with \( and \)
-        .replace(/\\\(/g, "$")
-        .replace(/\\\)/g, "$")
-    );
+  const processContent = (content: string | undefined) => {
+    if (!content) {
+      return ""; // Do nothing if content is undefined
+    }
+    return content
+      .replace(/\\\[/g, "$$")
+      .replace(/\\\]/g, "$$")
+      .replace(/\\\(/g, "$")
+      .replace(/\\\)/g, "$");
   };
 
   const contentToRender =
     typeof message.content === "object"
-      ? processContent(message.content.answer)
+      ? processContent(message.content.formatted_notes)
       : typeof message.content === "string"
       ? processContent(message.content)
       : "";

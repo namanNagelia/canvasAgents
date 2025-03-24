@@ -11,7 +11,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 
-export const GeneralAgentRender = ({
+export const ResearchAgentRender = ({
   message,
   agentDetails,
 }: {
@@ -27,22 +27,20 @@ export const GeneralAgentRender = ({
     }
   }
 
-  // Process content to ensure LaTeX is rendered correctly
-  const processContent = (content: string) => {
-    // Replace \[ and \] with $$ for block math
-    return (
-      content
-        .replace(/\\\[/g, "$$")
-        .replace(/\\\]/g, "$$")
-        // Handle inline math with \( and \)
-        .replace(/\\\(/g, "$")
-        .replace(/\\\)/g, "$")
-    );
+  const processContent = (content: string | undefined) => {
+    if (!content) {
+      return ""; // Do nothing if content is undefined
+    }
+    return content
+      .replace(/\\\[/g, "$$")
+      .replace(/\\\]/g, "$$")
+      .replace(/\\\(/g, "$")
+      .replace(/\\\)/g, "$");
   };
 
   const contentToRender =
     typeof message.content === "object"
-      ? processContent(message.content.answer)
+      ? processContent(message.content.formatted_notes)
       : typeof message.content === "string"
       ? processContent(message.content)
       : "";
@@ -89,6 +87,7 @@ export const GeneralAgentRender = ({
           {contentToRender}
         </ReactMarkdown>
       </div>
+
       <Accordion type="single" collapsible>
         <AccordionItem value="item-1">
           <AccordionTrigger>See agent planning process</AccordionTrigger>
@@ -97,6 +96,18 @@ export const GeneralAgentRender = ({
           </AccordionContent>
         </AccordionItem>
       </Accordion>
+
+      {message.content.bibliography && (
+        <div className="mt-4 p-3 bg-white dark:bg-gray-700 rounded-lg shadow-md">
+          <h3 className="font-semibold text-lg mb-2">Bibliography</h3>
+          <ReactMarkdown
+            remarkPlugins={[remarkMath]}
+            rehypePlugins={[rehypeKatex]}
+          >
+            {message.content.bibliography}
+          </ReactMarkdown>
+        </div>
+      )}
     </div>
   );
 };
