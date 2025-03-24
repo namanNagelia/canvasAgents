@@ -26,48 +26,98 @@ export const MermaidAgentRender = ({
 }) => {
   let content = message.content;
   let parsedContent: any = null;
+  let diagramCode = "";
+  let interpretation = "";
+  let planningProcess = "";
+  let diagramTypeRationale = "";
 
-  // If content is a string, try parsing it as JSON
+  // If content is a string, try extracting components
   if (message.type === "ai" && typeof message.content === "string") {
-    // First attempt to parse the entire content as JSON
+    const contentStr = message.content;
+
+    // Try to extract the mermaid diagram
+    const mermaidMatch = contentStr.match(/```mermaid\s*([\s\S]*?)\s*```/);
+    if (mermaidMatch) {
+      diagramCode = mermaidMatch[1].trim();
+    } else if (
+      contentStr.trim().startsWith("graph ") ||
+      contentStr.trim().startsWith("flowchart ") ||
+      contentStr.trim().startsWith("sequenceDiagram") ||
+      contentStr.trim().startsWith("classDiagram") ||
+      contentStr.trim().startsWith("stateDiagram")
+    ) {
+      // Raw mermaid diagram without code block markers
+      diagramCode = contentStr.trim();
+    }
+
+    // Try to extract embedded JSON
     try {
-      parsedContent = JSON.parse(message.content);
-      content = parsedContent;
-      console.log("Successfully parsed JSON content:", content);
-    } catch (error) {
-      // If that fails, check if it contains a mermaid diagram and JSON object
-      try {
-        const mermaidMatch = message.content.match(/```mermaid([\s\S]*?)```/);
-        const jsonMatch = message.content.match(/{[\s\S]*}/);
+      const jsonRegex = /{[\s\S]*}/;
+      const jsonMatch = contentStr.match(jsonRegex);
 
-        if (mermaidMatch && jsonMatch) {
-          const diagramCode = mermaidMatch[1].trim();
-          const jsonObject = JSON.parse(jsonMatch[0]);
+      if (jsonMatch) {
+        const jsonObject = JSON.parse(jsonMatch[0]);
+        interpretation = jsonObject.interpretation || "";
+        planningProcess = jsonObject.planning_process || "";
+        diagramTypeRationale = jsonObject.diagram_type_rationale || "";
+      }
+    } catch (jsonError) {
+      console.error("Failed to extract embedded JSON:", jsonError);
+    }
 
-          content = {
-            diagram: diagramCode,
-            ...jsonObject,
-          };
-          console.log("Extracted diagram and JSON:", content);
-        }
-        // Check if it's a raw graph definition without mermaid tags
-        else if (
-          message.content.trim().startsWith("graph ") ||
-          message.content.trim().startsWith("flowchart ") ||
-          message.content.trim().startsWith("sequenceDiagram") ||
-          message.content.trim().startsWith("classDiagram") ||
-          message.content.trim().startsWith("stateDiagram")
-        ) {
-          // Raw mermaid diagram without code block markers
-          content = {
-            diagram: message.content.trim(),
-          };
-          console.log("Extracted raw diagram:", content);
-        }
-      } catch (jsonError) {
-        console.error("Failed to extract embedded JSON:", jsonError);
+    // If we have a diagram but no JSON was extracted, try to extract sections by headers
+    if (diagramCode && !interpretation) {
+      const interpretationMatch = contentStr.match(
+        /## Interpretation\s*([\s\S]*?)(?=##|$)/i
+      );
+      if (interpretationMatch) {
+        interpretation = interpretationMatch[1].trim();
+      }
+
+      const planningMatch = contentStr.match(
+        /## Planning Process\s*([\s\S]*?)(?=##|$)/i
+      );
+      if (planningMatch) {
+        planningProcess = planningMatch[1].trim();
+      }
+
+      const rationaleMatch = contentStr.match(
+        /## Diagram Type Rationale\s*([\s\S]*?)(?=##|$)/i
+      );
+      if (rationaleMatch) {
+        diagramTypeRationale = rationaleMatch[1].trim();
       }
     }
+
+    // Special case: Handle "Diagram:" prefix followed by mermaid code block
+    if (!diagramCode) {
+      const diagramPrefixMatch = contentStr.match(
+        /Diagram:\s*```mermaid\s*([\s\S]*?)\s*```/
+      );
+      if (diagramPrefixMatch) {
+        diagramCode = diagramPrefixMatch[1].trim();
+      }
+    }
+
+    // Try parsing the entire content as JSON as a fallback
+    if (!diagramCode && !interpretation) {
+      try {
+        parsedContent = JSON.parse(contentStr);
+        diagramCode = parsedContent.diagram_code || "";
+        interpretation = parsedContent.interpretation || "";
+        planningProcess = parsedContent.planning_process || "";
+        diagramTypeRationale = parsedContent.diagram_type_rationale || "";
+      } catch (error) {
+        console.log("Content is not valid JSON:", error);
+      }
+    }
+  } else if (message.type === "ai" && typeof message.content === "object") {
+    // Content is already an object
+    parsedContent = message.content;
+    diagramCode = parsedContent.diagram_code || parsedContent.diagram || "";
+    interpretation = parsedContent.interpretation || "";
+    planningProcess = parsedContent.planning_process || "";
+    diagramTypeRationale = parsedContent.diagram_type_rationale || "";
   }
 
   // Process content to ensure LaTeX is rendered correctly (if applicable)
@@ -81,6 +131,7 @@ export const MermaidAgentRender = ({
 
   // Add a function to handle escaped characters in diagram code
   const processDiagramCode = (code: string) => {
+    if (!code) return "";
     // Replace escaped newlines with actual newlines
     let processed = code.replace(/\\n/g, "\n");
     // Replace escaped quotes with actual quotes
@@ -90,43 +141,14 @@ export const MermaidAgentRender = ({
     return processed;
   };
 
-  // Extract diagram code, prioritizing structured content over string parsing
-  const diagramCode =
-    typeof content === "object" && content !== null && content.diagram
-      ? processDiagramCode(content.diagram)
-      : typeof content === "string" && content.includes("```mermaid")
-      ? processDiagramCode(
-          content.split("```mermaid")[1].split("```")[0].trim()
-        )
-      : typeof content === "string" &&
-        (content.trim().startsWith("graph ") ||
-          content.trim().startsWith("flowchart ") ||
-          content.trim().startsWith("sequenceDiagram") ||
-          content.trim().startsWith("classDiagram") ||
-          content.trim().startsWith("stateDiagram"))
-      ? processDiagramCode(content.trim())
-      : "";
-
-  // Extract additional content fields
-  const interpretation =
-    typeof content === "object" && content !== null
-      ? content.interpretation || ""
-      : "";
-  const planningProcess =
-    typeof content === "object" && content !== null
-      ? content.planning_process || ""
-      : "";
-  const diagramTypeRationale =
-    typeof content === "object" && content !== null
-      ? content.diagram_type_rationale || ""
-      : "";
+  // Process the diagram code
+  diagramCode = processDiagramCode(diagramCode);
 
   console.log("Extracted components:");
   console.log("Diagram code:", diagramCode);
   console.log("Interpretation:", interpretation);
   console.log("Planning process:", planningProcess);
   console.log("Diagram type rationale:", diagramTypeRationale);
-  console.log(content);
 
   return (
     <div className="max-w-2xl w-full p-3 rounded-lg bg-gray-100 dark:bg-gray-800">
@@ -184,7 +206,6 @@ export const MermaidAgentRender = ({
           </div>
         )}
 
-        {/* Diagram Type Rationale */}
         {diagramTypeRationale && (
           <div className="p-4 bg-white dark:bg-gray-700 rounded-lg">
             <h3 className="text-lg font-semibold mb-2">

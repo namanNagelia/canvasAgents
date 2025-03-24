@@ -8,6 +8,7 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import HumanMessage, AIMessage, FunctionMessage
 from langchain_tavily import TavilySearch
 from .utilities import process_file
+from .agentOutputs import GeneralResponse, NoteResponse, ResearchResponse, StepResponse, DiagramResponse, FlashcardResponse, FeynmanResponse
 import json
 from typing import List, Dict, Any, Optional
 from langchain_core.pydantic_v1 import BaseModel, Field
@@ -65,78 +66,6 @@ Before answering, I will take these planning steps:
    - Consider how to make the output most useful for the user
    - DO NOT GIVE ME A DIRECT RESPONSE. I want you to follow the structured output format. 
 """
-
-
-class GeneralResponse(BaseModel):
-    """Final structured general output"""
-    planning_process: str = Field(
-        description="Detailed explanation of the planning process")
-    answer: str = Field(description="Answer to the user's query")
-
-
-class NoteResponse(BaseModel):
-    """Final structured notes output"""
-    planning_process: str = Field(
-        description="Detailed explanation of the planning process")
-    research_method: str = Field(description="Method used for research")
-    formatted_notes: str = Field(
-        description="Complete formatted notes using markdown")
-
-
-class ResearchResponse(BaseModel):
-    """Final structured research notes output"""
-    planning_process: str = Field(
-        description="Detailed explanation of the planning and research methodology")
-    formatted_notes: str = Field(
-        description="Complete formatted notes with citations")
-    bibliography: str = Field(description="Bibliography or reference section")
-
-
-class StepResponse(BaseModel):
-    """Final structured problem-solving output"""
-    planning_process: str = Field(
-        description="Problem-solving plan and approach")
-    problem_identification: str = Field(
-        description="Type of problem and key concepts involved")
-    step_solution: str = Field(
-        description="Step-by-step solution with clear explanations")
-    visual_aids: Optional[str] = Field(
-        description="Diagrams or visual aids when applicable", default=None)
-
-
-class DiagramResponse(BaseModel):
-    """Final structured diagram output"""
-    planning_process: str = Field(
-        description="Detailed diagram planning process")
-    diagram_type_rationale: str = Field(
-        description="Explanation of why this diagram type was chosen")
-    diagram_code: str = Field(description="Complete Mermaid code")
-    interpretation: str = Field(
-        description="Brief explanation of how to interpret the diagram")
-
-
-class FlashcardResponse(BaseModel):
-    """Final structured flashcard output"""
-    planning_process: str = Field(
-        description="Planning approach to creating these flashcards")
-    organization_approach: str = Field(
-        description="How the content is organized and why")
-    flashcards: List[Dict[str, str]] = Field(
-        description="Complete set of flashcards in an organized format with 'front' and 'back' keys")
-    study_tips: str = Field(
-        description="Suggestions for effective study techniques")
-
-
-class FeynmanResponse(BaseModel):
-    """Final structured Feynman explanation output"""
-    planning_process: str = Field(
-        description="Planning process for simplifying this concept")
-    core_concept: str = Field(description="Core concept to be explained")
-    explanation: str = Field(
-        description="Simplified explanation using the Feynman technique")
-    examples: str = Field(
-        description="Analogies, examples, and visual descriptions")
-    summary: str = Field(description="Brief summary of the key takeaways")
 
 
 def parse_output(output, response_class):
@@ -422,10 +351,12 @@ INSTRUCTIONS:
 5. Explain the key components of your diagram
 6. Always verify that your Mermaid syntax is valid
 
+IMPORTANT: The diagram_code MUST be provided as raw Mermaid code without the markdown code block delimiters - do NOT include the ```mermaid and ``` tags.
+
 When returning your diagram, use the structured output format with these fields:
 - planning_process: Detailed explanation of your diagram planning process
 - diagram_type_rationale: Description of why you chose this particular diagram type
-- diagram_code: Complete Mermaid code so i can render it in js. Ensure it is valid mermaid code.
+- diagram_code: Complete Mermaid code, provided as raw code without markdown delimiters
 - interpretation: Brief explanation of how to interpret the diagram
 - Render equations using latex.
 """
@@ -606,8 +537,15 @@ def extract_structured_content(content, agent_type, expected_fields):
     if agent_type == "diagram":
         mermaid_match = re.search(r"```mermaid\s*([\s\S]*?)\s*```", content)
         if mermaid_match:
-            structured_result[
-                "diagram_code"] = f"```mermaid\n{mermaid_match.group(1).strip()}\n```"
+            # Extract raw mermaid code without the delimiters
+            structured_result["diagram_code"] = mermaid_match.group(1).strip()
+        else:
+            # Try to find raw mermaid code without code blocks
+            graph_match = re.search(
+                r"(?:graph|flowchart|sequenceDiagram|classDiagram|stateDiagram|erDiagram|gantt|pie|gitGraph)\s+[\s\S]+", content)
+            if graph_match:
+                structured_result["diagram_code"] = graph_match.group(
+                    0).strip()
 
     # Special handling for flashcard agent - try to extract JSON arrays
     if agent_type == "flashcard" and "flashcards" in expected_fields:
@@ -754,156 +692,17 @@ def process_agent_result(result, agent_type, expected_fields):
             else:
                 processed_result[field] = f"No {field} provided"
 
+    # Special handling for diagram agent - ensure diagram_code is raw Mermaid code
+    if agent_type == "diagram" and "diagram_code" in processed_result:
+        # Remove any markdown code block delimiters
+        diagram_code = processed_result["diagram_code"]
+        # Strip markdown code block syntax if present
+        diagram_code = re.sub(r'```mermaid\s*', '', diagram_code)
+        diagram_code = re.sub(r'\s*```$', '', diagram_code)
+        diagram_code = diagram_code.strip()
+        processed_result["diagram_code"] = diagram_code
+
     return processed_result
-
-
-def run_agent(topic_request, file_paths=None, agent_type="note", session_id=None, chat_history=None):
-    """
-    Run the specified agent with the given topic and optional files, maintaining conversation history.
-
-    Args:
-        topic_request (str): The topic to process
-        file_paths (list): Optional list of file paths to process
-        agent_type (str): Type of agent to use 
-        session_id (str): Optional session ID for persistence
-        chat_history (list): Optional list of previous messages
-
-    Returns:
-        dict: Structured output from the agent
-    """
-    agent_map = {
-        "note": note_agent,
-        "research": research_agent,
-        "step": step_agent,
-        "diagram": diagram_agent,
-        "flashcard": flashcard_agent,
-        "feynman": feynman_agent,
-        "general": general_agent
-    }
-
-    selected_agent = agent_map.get(agent_type)
-    if not selected_agent:
-        raise ValueError(f"Unknown agent type: {agent_type}")
-
-    if chat_history is None:
-        chat_history = []
-
-    langchain_messages = []
-    for message in chat_history:
-        if message['type'] == 'human':
-            langchain_messages.append(HumanMessage(content=message['content']))
-        elif message['type'] == 'ai':
-            langchain_messages.append(AIMessage(content=message['content']))
-
-    file_content = ""
-    if file_paths:
-        for path in file_paths:
-            content = process_file(path)
-            file_content += f"\nContent from {path}:\n{content}\n"
-
-    if file_content:
-        message_content = f"Please process this topic: {topic_request}. Use the following file content as reference:\n\n{file_content}"
-    else:
-        message_content = f"Please process this topic: {topic_request}"
-
-    new_message = HumanMessage(content=message_content)
-    messages = langchain_messages + [new_message]
-
-    result = selected_agent.invoke(
-        {
-            "messages": messages
-        }
-    )
-
-    chat_history.append({"type": "human", "content": message_content})
-
-    # Clean up the result to ensure it has the correct structure
-    if isinstance(result, dict):
-        # Define the expected fields for each agent type
-        expected_fields = {
-            "general": ["planning_process", "answer"],
-            "note": ["planning_process", "research_method", "formatted_notes"],
-            "research": ["planning_process", "formatted_notes", "bibliography"],
-            "step": ["planning_process", "problem_identification", "step_solution", "visual_aids"],
-            "diagram": ["planning_process", "diagram_type_rationale", "diagram_code", "interpretation"],
-            "flashcard": ["planning_process", "organization_approach", "flashcards", "study_tips"],
-            "feynman": ["planning_process", "core_concept", "explanation", "examples", "summary"]
-        }
-
-        # Check for combined fields and split if needed
-        result = process_agent_result(
-            result, agent_type, expected_fields[agent_type])
-
-        # If there's an "output" field but we're expecting structured fields
-        if "output" in result and agent_type in expected_fields:
-            content = result["output"]
-
-            # Extract structured content using our helper function
-            structured_result = extract_structured_content(
-                content, agent_type, expected_fields[agent_type])
-
-            # Fill in missing fields with defaults
-            for field in expected_fields[agent_type]:
-                if field not in structured_result:
-                    if field in result:
-                        structured_result[field] = result[field]
-                    elif field == expected_fields[agent_type][-1] and not any(f in expected_fields[agent_type][-1] for f in structured_result):
-                        # If last field isn't extracted and has special content, use all content
-                        structured_result[field] = content
-                    else:
-                        structured_result[field] = f"No {field} provided"
-
-            result = structured_result
-
-        # If we got answer but need a different structure
-        elif "answer" in result and agent_type != "general":
-            content = result["answer"]
-
-            # Extract structured content using our helper function
-            structured_result = extract_structured_content(
-                content, agent_type, expected_fields[agent_type])
-
-            # Fill in missing fields with defaults
-            for field in expected_fields[agent_type]:
-                if field not in structured_result:
-                    if field == "planning_process" and "planning_process" in result:
-                        structured_result[field] = result["planning_process"]
-                    elif field == expected_fields[agent_type][-1] and not any(f in expected_fields[agent_type][-1] for f in structured_result):
-                        # If last field isn't extracted, use all content
-                        structured_result[field] = content
-                    else:
-                        structured_result[field] = f"No {field} provided"
-
-            result = structured_result
-
-        # Ensure the result is clean and well-structured
-        result = process_agent_result(
-            result, agent_type, expected_fields[agent_type])
-
-        # Determine AI content for chat history
-        ai_content = ""
-        if agent_type == "general" and "answer" in result:
-            ai_content = result["answer"]
-        elif agent_type == "note" and "formatted_notes" in result:
-            ai_content = result["formatted_notes"]
-        elif agent_type == "research" and "formatted_notes" in result:
-            ai_content = result["formatted_notes"]
-        elif agent_type == "step" and "step_solution" in result:
-            ai_content = result["step_solution"]
-        elif agent_type == "diagram" and "diagram_code" in result:
-            ai_content = result["diagram_code"]
-        elif agent_type == "flashcard" and "flashcards" in result:
-            ai_content = json.dumps(result["flashcards"], indent=2)
-        elif agent_type == "feynman" and "explanation" in result:
-            ai_content = result["explanation"]
-        elif "output" in result:
-            ai_content = result["output"]
-        else:
-            ai_content = str(result)
-
-        chat_history.append({"type": "ai", "content": ai_content})
-
-    return result, chat_history
 
 
 def run_agent_file_content(topic_request, file_content=None, agent_type="note", session_id=None, chat_history=None):
@@ -1048,58 +847,3 @@ def run_agent_file_content(topic_request, file_content=None, agent_type="note", 
         chat_history.append({"type": "ai", "content": ai_content})
 
     return result, chat_history
-
-
-def display_result(result, agent_type="note"):
-    """
-    Format and display the result based on agent type.
-
-    Args:
-        result (dict): The result from the agent
-        agent_type (str): Type of agent used
-    """
-    print("\n" + "="*50)
-    print(f"FINAL {agent_type.upper()} OUTPUT")
-    print("="*50)
-
-    for key, value in result.items():
-        print(f"\n{key.upper().replace('_', ' ')}:")
-        print(value)
-
-    print("\n" + "="*50)
-
-
-# Update the test function to demonstrate conversation memory
-# if __name__ == "__main__":
-#     # Start with empty chat history
-#     chat_history = []
-
-#     # First question
-#     topic = "Explain to me machine learning with pytorch."
-#     # file_path = "/Users/nnagelia/Downloads/8.2 Particle Motion Integrals 2021.docx _ Schoology.pdf"
-#     result, chat_history = run_agent(
-#         topic,
-#         agent_type="general",
-#         chat_history=chat_history
-#     )
-#     print("Result")
-#     print(result)
-#     print("Chat history")
-#     print(chat_history)
-
-#     topic = "Now how do i code this?"
-#     result, chat_history = run_agent(
-#         topic,
-#         agent_type="step",
-#         chat_history=chat_history
-#     )
-#     print(result)
-#     print(chat_history)
-#     topic = "What did i just ask you to do?"
-#     result, chat_history = run_agent(
-#         topic,
-#         agent_type="general",
-#         chat_history=chat_history
-#     )
-#     print(result)
-#     print(chat_history)
