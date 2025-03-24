@@ -513,7 +513,6 @@ def run_agent(topic_request, file_paths=None, agent_type="note", session_id=None
     if chat_history is None:
         chat_history = []
 
-    # Convert JSON chat history to LangChain message objects
     langchain_messages = []
     for message in chat_history:
         if message['type'] == 'human':
@@ -532,30 +531,21 @@ def run_agent(topic_request, file_paths=None, agent_type="note", session_id=None
     else:
         message_content = f"Please process this topic: {topic_request}"
 
-    # Create new human message
     new_message = HumanMessage(content=message_content)
-
-    # Add to LangChain messages list for the agent
     messages = langchain_messages + [new_message]
 
-    # Invoke the agent
     result = selected_agent.invoke(
         {
             "messages": messages
         }
     )
 
-    # Add the new human message to the JSON chat history
     chat_history.append({"type": "human", "content": message_content})
 
-    # Add the AI response to the JSON chat history
     if isinstance(result, dict):
-        # Clean up the result dictionary to create a more readable response
         cleaned_result = {}
         for key, value in result.items():
-            # Skip the 'messages' field or convert it to a more readable format
             if key == 'messages':
-                # Extract just the content from each message
                 message_contents = []
                 if isinstance(value, list):
                     for msg in value:
@@ -568,20 +558,16 @@ def run_agent(topic_request, file_paths=None, agent_type="note", session_id=None
             else:
                 cleaned_result[key] = value
 
-        # Format the result as a string representation for chat history
         ai_content = ""
         if "answer" in cleaned_result:
             ai_content = cleaned_result["answer"]
         elif "output" in cleaned_result:
             ai_content = cleaned_result["output"]
         else:
-            # If there's no clear output, use the entire cleaned result
             ai_content = str(cleaned_result)
 
-        # Add formatted AI message to chat history
         chat_history.append({"type": "ai", "content": ai_content})
 
-    # Return both the result and updated history
     return result, chat_history
 
 
@@ -616,7 +602,6 @@ def run_agent_file_content(topic_request, file_content=None, agent_type="note", 
     if chat_history is None:
         chat_history = []
 
-    # Convert JSON chat history to LangChain message objects
     langchain_messages = []
     for message in chat_history:
         if message['type'] == 'human':
@@ -629,30 +614,22 @@ def run_agent_file_content(topic_request, file_content=None, agent_type="note", 
     else:
         message_content = f"Please process this topic: {topic_request}"
 
-    # Create new human message
     new_message = HumanMessage(content=message_content)
 
-    # Add to LangChain messages list for the agent
     messages = langchain_messages + [new_message]
 
-    # Invoke the agent
     result = selected_agent.invoke(
         {
             "messages": messages
         }
     )
 
-    # Add the new human message to the JSON chat history
     chat_history.append({"type": "human", "content": message_content})
 
-    # Add the AI response to the JSON chat history
     if isinstance(result, dict):
-        # Clean up the result dictionary to create a more readable response
         cleaned_result = {}
         for key, value in result.items():
-            # Skip the 'messages' field or convert it to a more readable format
             if key == 'messages':
-                # Extract just the content from each message
                 message_contents = []
                 if isinstance(value, list):
                     for msg in value:
@@ -665,20 +642,16 @@ def run_agent_file_content(topic_request, file_content=None, agent_type="note", 
             else:
                 cleaned_result[key] = value
 
-        # Format the result as a string representation for chat history
         ai_content = ""
         if "answer" in cleaned_result:
             ai_content = cleaned_result["answer"]
         elif "output" in cleaned_result:
             ai_content = cleaned_result["output"]
         else:
-            # If there's no clear output, use the entire cleaned result
             ai_content = str(cleaned_result)
 
-        # Add formatted AI message to chat history
         chat_history.append({"type": "ai", "content": ai_content})
 
-    # Return both the result and updated history
     return result, chat_history
 
 

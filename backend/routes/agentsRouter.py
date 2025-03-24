@@ -192,7 +192,6 @@ async def chat(request: Request):
         user_input.append({"agent_type": agent_type, "message": message})
         ai_response.append({"agent_type": agent_type, "message": result})
 
-        # Create the object and clean it
         obj = {
             "id": str(llm_session_obj.id),
             "user_id": str(llm_session_obj.user_id),
@@ -200,14 +199,11 @@ async def chat(request: Request):
             "ai_response": ai_response,
             "chat_history": updated_lang_history,
         }
-
-        # Clean the dictionary to ensure JSON-serializability
         cleaned_obj = clean_dict(obj)
 
         print("Cleaned obj: ", cleaned_obj)
         print(json.dumps(cleaned_obj, indent=4))
 
-        # Assign cleaned values to the database object
         llm_session_obj.user_input = cleaned_obj["user_input"]
         llm_session_obj.ai_response = cleaned_obj["ai_response"]
         llm_session_obj.chat_history = cleaned_obj["chat_history"]
