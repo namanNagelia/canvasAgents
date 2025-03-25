@@ -91,7 +91,7 @@ npm run dev
 
 4. **Step-by-Step Agent**
 
-   - Breaks down complex topics
+   - Breaks down complex topics into a step by step guide on how to solve a specific problem
    - Provides detailed explanations
 
 5. **Note Agent**
@@ -102,15 +102,3 @@ npm run dev
 6. **Feynman Agent**
    - Simplifies complex topics
    - Uses analogies and examples
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a Pull Request
-
-## License
-
-MIT License
