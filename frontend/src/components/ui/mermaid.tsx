@@ -57,6 +57,7 @@ const Mermaid: React.FC<MermaidProps> = ({ chart }) => {
         // Escape special characters in node labels
         cleanChart = cleanChart.replace(/\[([^\]]*)\]/g, (match, content) => {
           // Replace characters that might conflict with Mermaid syntax
+          console.log(match);
           const escaped = content
             .replace(/=/g, "&#61;")
             .replace(/\(/g, "&#40;")
