@@ -8,7 +8,6 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import HumanMessage, AIMessage, FunctionMessage
 from langchain_tavily import TavilySearch
 from .utilities import process_file
-from .agentOutputs import GeneralResponse, NoteResponse, ResearchResponse, StepResponse, DiagramResponse, FlashcardResponse, FeynmanResponse
 import json
 from typing import List, Dict, Any, Optional
 from langchain_core.pydantic_v1 import BaseModel, Field
@@ -20,7 +19,6 @@ from langgraph.graph import START, MessagesState, StateGraph
 
 from dotenv import load_dotenv
 from functools import partial
-import re
 
 load_dotenv()
 
@@ -64,45 +62,112 @@ Before answering, I will take these planning steps:
    - Plan the format and structure of my final response
    - Ensure all requirements from the instructions are addressed
    - Consider how to make the output most useful for the user
-   - DO NOT GIVE ME A DIRECT RESPONSE. I want you to follow the structured output format. 
 """
 
 
+class GeneralResponse(BaseModel):
+    """Final structured general output"""
+    planning_process: str = Field(
+        description="Detailed explanation of the planning process")
+    answer: str = Field(description="Answer to the user's query")
+
+
+class NoteResponse(BaseModel):
+    """Final structured notes output"""
+    planning_process: str = Field(
+        description="Detailed explanation of the planning process")
+    research_method: str = Field(description="Method used for research")
+    formatted_notes: str = Field(
+        description="Complete formatted notes using markdown")
+
+
+class ResearchResponse(BaseModel):
+    """Final structured research notes output"""
+    planning_process: str = Field(
+        description="Detailed explanation of the planning and research methodology")
+    formatted_notes: str = Field(
+        description="Complete formatted notes with citations")
+    bibliography: str = Field(description="Bibliography or reference section")
+
+
+class StepResponse(BaseModel):
+    """Final structured problem-solving output"""
+    planning_process: str = Field(
+        description="Problem-solving plan and approach")
+    problem_identification: str = Field(
+        description="Type of problem and key concepts involved")
+    step_solution: str = Field(
+        description="Step-by-step solution with clear explanations")
+    visual_aids: Optional[str] = Field(
+        description="Diagrams or visual aids when applicable", default=None)
+
+
+class DiagramResponse(BaseModel):
+    """Final structured diagram output"""
+    planning_process: str = Field(
+        description="Detailed diagram planning process")
+    diagram_type_rationale: str = Field(
+        description="Explanation of why this diagram type was chosen")
+    diagram_code: str = Field(description="Complete Mermaid code")
+    interpretation: str = Field(
+        description="Brief explanation of how to interpret the diagram")
+
+
+class FlashcardResponse(BaseModel):
+    """Final structured flashcard output"""
+    planning_process: str = Field(
+        description="Planning approach to creating these flashcards")
+    organization_approach: str = Field(
+        description="How the content is organized and why")
+    flashcards: List[Dict[str, str]] = Field(
+        description="Complete set of flashcards in an organized format with 'front' and 'back' keys")
+    study_tips: str = Field(
+        description="Suggestions for effective study techniques")
+
+
+class FeynmanResponse(BaseModel):
+    """Final structured Feynman explanation output"""
+    planning_process: str = Field(
+        description="Planning process for simplifying this concept")
+    core_concept: str = Field(description="Core concept to be explained")
+    explanation: str = Field(
+        description="Simplified explanation using the Feynman technique")
+    examples: str = Field(
+        description="Analogies, examples, and visual descriptions")
+    summary: str = Field(description="Brief summary of the key takeaways")
+
+
 def parse_output(output, response_class):
-    if "function_call" not in output.additional_kwargs:
-        # Create a properly structured response when function_call is missing
-        if response_class == GeneralResponse:
-            return AgentFinish(return_values={"planning_process": "Direct response without explicit planning", "answer": output.content}, log=output.content)
-        elif response_class == NoteResponse:
-            return AgentFinish(return_values={"planning_process": "Direct response without explicit planning", "research_method": "Direct knowledge", "formatted_notes": output.content}, log=output.content)
-        elif response_class == ResearchResponse:
-            return AgentFinish(return_values={"planning_process": "Direct response without explicit planning", "formatted_notes": output.content, "bibliography": "No bibliography provided"}, log=output.content)
-        elif response_class == StepResponse:
-            return AgentFinish(return_values={"planning_process": "Direct response without explicit planning", "problem_identification": "Problem solved directly", "step_solution": output.content, "visual_aids": None}, log=output.content)
-        elif response_class == DiagramResponse:
-            return AgentFinish(return_values={"planning_process": "Direct response without explicit planning", "diagram_type_rationale": "Direct response", "diagram_code": output.content, "interpretation": "No explicit interpretation provided"}, log=output.content)
-        elif response_class == FlashcardResponse:
-            return AgentFinish(return_values={"planning_process": "Direct response without explicit planning", "organization_approach": "Direct response", "flashcards": [{"front": "Question", "back": output.content}], "study_tips": "No study tips provided"}, log=output.content)
-        elif response_class == FeynmanResponse:
-            return AgentFinish(return_values={"planning_process": "Direct response without explicit planning", "core_concept": "Direct response", "explanation": output.content, "examples": "No specific examples provided", "summary": "No explicit summary provided"}, log=output.content)
-        else:
-            # Default fallback
+    # Handle the case when output is already a structured object (like NoteResponse)
+    if isinstance(output, response_class):
+        # Use model_dump() for newer Pydantic or dict() for older versions
+        try:
+            return AgentFinish(return_values=output.model_dump(), log=str(output))
+        except AttributeError:
+            return AgentFinish(return_values=output.dict(), log=str(output))
+
+    # Handle the case when output is a BaseModel but not the expected response class
+    if isinstance(output, BaseModel):
+        try:
+            return AgentFinish(return_values=output.model_dump(), log=str(output))
+        except AttributeError:
+            return AgentFinish(return_values=output.dict(), log=str(output))
+
+    # Handle regular AI messages
+    if not hasattr(output, 'additional_kwargs'):
+        if hasattr(output, 'content'):
             return AgentFinish(return_values={"output": output.content}, log=output.content)
+        return AgentFinish(return_values={"output": str(output)}, log=str(output))
+
+    # Original handling for function call outputs
+    if "function_call" not in output.additional_kwargs:
+        return AgentFinish(return_values={"output": output.content}, log=output.content)
 
     function_call = output.additional_kwargs["function_call"]
     name = function_call["name"]
     inputs = json.loads(function_call["arguments"])
 
     if name == response_class.__name__:
-        # Validate and ensure all required fields are present in the response
-        for field in response_class.__fields__:
-            if field not in inputs:
-                # Add missing fields with default values
-                if field in response_class.__fields__ and response_class.__fields__[field].default is not None:
-                    inputs[field] = response_class.__fields__[field].default
-                else:
-                    inputs[field] = f"No {field} provided"
-
         return AgentFinish(return_values=inputs, log=str(function_call))
     else:
         return AgentActionMessageLog(
@@ -127,77 +192,7 @@ def parse_diagram_output(output):
 
 
 def parse_flashcard_output(output):
-    """Parse output specifically for flashcard agent"""
-    if "function_call" not in output.additional_kwargs:
-        # Check if the output contains a JSON array that might be flashcards
-        content = output.content
-        flashcards = []
-
-        # Try to find a JSON array in the content
-        match = re.search(r"\[\s*{\s*['\"]front['\"][\s\S]*?\}\s*\]", content)
-        if match:
-            try:
-                # Replace single quotes with double quotes for valid JSON
-                json_str = match.group(0).replace("'", "\"")
-                flashcards = json.loads(json_str)
-            except json.JSONDecodeError:
-                pass
-
-        # If no JSON array is found, try to extract flashcards from structured text
-        if not flashcards:
-            # Look for numbered or bulleted flashcard-like patterns
-            front_back_pairs = re.findall(
-                r"(?:^|\n)(?:\d+\.|\*|\-)\s*(?:Q:|Question:|Front:)?\s*(.*?)\s*(?:A:|Answer:|Back:)?\s*(.*?)(?=\n(?:\d+\.|\*|\-|$)|\Z)", content)
-
-            if front_back_pairs:
-                flashcards = [{"front": front.strip(), "back": back.strip()}
-                              for front, back in front_back_pairs if front.strip() and back.strip()]
-
-        # If we still don't have flashcards, create a fallback one
-        if not flashcards:
-            flashcards = [{"front": "What are Markov Decision Processes?",
-                           "back": "Fallback answer: Please review the content for details on MDPs."}]
-
-        return AgentFinish(
-            return_values={
-                "planning_process": "Direct response without explicit planning",
-                "organization_approach": "Direct organization approach",
-                "flashcards": flashcards,
-                "study_tips": "Review the flashcards regularly using spaced repetition."
-            },
-            log=output.content
-        )
-
-    # Regular function call handling (unchanged)
-    function_call = output.additional_kwargs["function_call"]
-    name = function_call["name"]
-    inputs = json.loads(function_call["arguments"])
-
-    if name == "FlashcardResponse":
-        # Validate and ensure all required fields are present in the response
-        for field in FlashcardResponse.__fields__:
-            if field not in inputs:
-                # Add missing fields with default values
-                if field in FlashcardResponse.__fields__ and FlashcardResponse.__fields__[field].default is not None:
-                    inputs[field] = FlashcardResponse.__fields__[field].default
-                else:
-                    inputs[field] = f"No {field} provided"
-
-        # Special handling for flashcards field
-        if "flashcards" in inputs and (inputs["flashcards"] == "No flashcards provided" or inputs["flashcards"] == []):
-            # Create default flashcards if none provided
-            inputs["flashcards"] = [
-                {"front": "What are Markov Decision Processes?",
-                    "back": "Mathematical framework for modeling decision-making when outcomes are partly random and partly controlled by the decision maker."},
-                {"front": "What are the key components of an MDP?",
-                    "back": "States, Actions, Transition probabilities, Rewards, and Policy."}
-            ]
-
-        return AgentFinish(return_values=inputs, log=str(function_call))
-    else:
-        return AgentActionMessageLog(
-            tool=name, tool_input=inputs, log="", message_log=[output]
-        )
+    return parse_output(output, FlashcardResponse)
 
 
 def parse_feynman_output(output):
@@ -225,7 +220,7 @@ INSTRUCTIONS:
 When returning your notes, use the structured output format with these fields:
 - planning_process: Detailed explanation of your planning process
 - research_method: Method used for research
-- formatted_notes: Complete formatted notes using markdown. Render equations using latex.
+- formatted_notes: Complete formatted notes using markdown
 """
 
     prompt = ChatPromptTemplate.from_messages([
@@ -234,7 +229,8 @@ When returning your notes, use the structured output format with these fields:
         MessagesPlaceholder(variable_name="agent_scratchpad"),
     ])
 
-    llm_with_tools = llm.bind_functions([tool, GeneralResponse])
+    llm_with_tools = llm.bind_functions([tool, NoteResponse])
+    llm_with_tools = llm_with_tools.with_structured_output(NoteResponse)
 
     agent = (
         {
@@ -268,7 +264,6 @@ When returning your notes, use the structured output format with these fields:
 - planning_process: Detailed explanation of your planning and research methodology
 - formatted_notes: Complete formatted notes with citations in markdown format
 - bibliography: Bibliography or reference section
-- Render equations using latex. Output in markdown format.
 """
 
     prompt = ChatPromptTemplate.from_messages([
@@ -278,6 +273,7 @@ When returning your notes, use the structured output format with these fields:
     ])
 
     llm_with_tools = llm.bind_functions([tool, ResearchResponse])
+    llm_with_tools = llm_with_tools.with_structured_output(ResearchResponse)
 
     agent = (
         {
@@ -312,7 +308,6 @@ When returning your solution, use the structured output format with these fields
 - problem_identification: Type of problem and key concepts involved
 - step_solution: Step-by-step solution with clear explanations in markdown format
 - visual_aids: Diagrams or visual aids when applicable (optional)
-- Render equations using latex.
 """
 
     prompt = ChatPromptTemplate.from_messages([
@@ -322,6 +317,7 @@ When returning your solution, use the structured output format with these fields
     ])
 
     llm_with_tools = llm.bind_functions([tool, StepResponse])
+    llm_with_tools = llm_with_tools.with_structured_output(StepResponse)
 
     agent = (
         {
@@ -351,14 +347,11 @@ INSTRUCTIONS:
 5. Explain the key components of your diagram
 6. Always verify that your Mermaid syntax is valid
 
-IMPORTANT: The diagram_code MUST be provided as raw Mermaid code without the markdown code block delimiters - do NOT include the ```mermaid and ``` tags.
-
 When returning your diagram, use the structured output format with these fields:
 - planning_process: Detailed explanation of your diagram planning process
 - diagram_type_rationale: Description of why you chose this particular diagram type
-- diagram_code: Complete Mermaid code, provided as raw code without markdown delimiters
+- diagram_code: Complete Mermaid code so i can render it in markdown js.
 - interpretation: Brief explanation of how to interpret the diagram
-- Render equations using latex.
 """
 
     prompt = ChatPromptTemplate.from_messages([
@@ -368,7 +361,7 @@ When returning your diagram, use the structured output format with these fields:
     ])
 
     llm_with_tools = llm.bind_functions([tool, DiagramResponse])
-
+    llm_with_tools = llm_with_tools.with_structured_output(DiagramResponse)
     agent = (
         {
             "messages": lambda x: x["messages"],
@@ -402,7 +395,6 @@ When returning your flashcards, use the structured output format with these fiel
 - organization_approach: Description of how you've organized the content and why
 - flashcards: Complete set of flashcards in an organized format in json with two keys front: "question", back: "answer"
 - study_tips: Suggestions for effective study techniques
-- Render equations using latex.
 """
 
     prompt = ChatPromptTemplate.from_messages([
@@ -412,6 +404,7 @@ When returning your flashcards, use the structured output format with these fiel
     ])
 
     llm_with_tools = llm.bind_functions([tool, FlashcardResponse])
+    llm_with_tools = llm_with_tools.with_structured_output(FlashcardResponse)
 
     agent = (
         {
@@ -447,7 +440,7 @@ When returning your explanation, use the structured output format with these fie
 - explanation: Simplified explanation using the Feynman technique
 - examples: Analogies, examples, and visual descriptions
 - summary: Brief summary of the key takeaways 
-- all in markdown format. Render equations using latex.
+-all in markdown format
 """
 
     prompt = ChatPromptTemplate.from_messages([
@@ -457,7 +450,7 @@ When returning your explanation, use the structured output format with these fie
     ])
 
     llm_with_tools = llm.bind_functions([tool, FeynmanResponse])
-
+    llm_with_tools = llm_with_tools.with_structured_output(FeynmanResponse)
     agent = (
         {
             "messages": lambda x: x["messages"],
@@ -490,7 +483,7 @@ def create_general_agent():
     ])
 
     llm_with_tools = llm.bind_functions([tool, GeneralResponse])
-
+    llm_with_tools = llm_with_tools.with_structured_output(GeneralResponse)
     agent = (
         {
             "messages": lambda x: x["messages"],
@@ -515,203 +508,13 @@ flashcard_agent = create_flashcard_agent()
 feynman_agent = create_feynman_agent()
 
 
-def extract_structured_content(content, agent_type, expected_fields):
-    """
-    Extract structured content from LLM responses based on section headers.
-
-    Args:
-        content (str): The content to extract from
-        agent_type (str): The type of agent
-        expected_fields (list): List of expected fields for this agent type
-
-    Returns:
-        dict: Extracted structured content
-    """
-    structured_result = {}
-
-    # Check if content has nested sections by looking for section headers
-    has_nested_content = any(
-        re.search(f"## {field}", content.lower()) for field in expected_fields)
-
-    # Special handling for diagram agent - extract mermaid code blocks
-    if agent_type == "diagram":
-        mermaid_match = re.search(r"```mermaid\s*([\s\S]*?)\s*```", content)
-        if mermaid_match:
-            # Extract raw mermaid code without the delimiters
-            structured_result["diagram_code"] = mermaid_match.group(1).strip()
-        else:
-            # Try to find raw mermaid code without code blocks
-            graph_match = re.search(
-                r"(?:graph|flowchart|sequenceDiagram|classDiagram|stateDiagram|erDiagram|gantt|pie|gitGraph)\s+[\s\S]+", content)
-            if graph_match:
-                structured_result["diagram_code"] = graph_match.group(
-                    0).strip()
-
-    # Special handling for flashcard agent - try to extract JSON arrays
-    if agent_type == "flashcard" and "flashcards" in expected_fields:
-        # Try multiple JSON patterns to extract flashcards
-        json_patterns = [
-            # Standard JSON array format
-            r"\[\s*{\s*\"front\"[\s\S]*?\}\s*\]",
-            # JSON array with single quotes
-            r"\[\s*{\s*'front'[\s\S]*?\}\s*\]",
-            # Markdown table format (will need conversion)
-            r"\| *Front *\| *Back *\|[\s\S]*?\n\|[-\s]*\|[-\s]*\|([\s\S]*?)(?=\n\n|\Z)"
-        ]
-
-        for pattern in json_patterns:
-            match = re.search(pattern, content)
-            if match:
-                try:
-                    if pattern.startswith(r"\| *Front"):
-                        # Convert markdown table to JSON
-                        table_content = match.group(1)
-                        rows = table_content.strip().split('\n')
-                        flashcards = []
-
-                        for row in rows:
-                            cells = row.split('|')
-                            if len(cells) >= 3:  # Should have at least 3 parts with our split
-                                front = cells[1].strip()
-                                back = cells[2].strip()
-                                if front and back:  # Ensure non-empty
-                                    flashcards.append(
-                                        {"front": front, "back": back})
-                    else:
-                        # Standard JSON parsing
-                        json_str = match.group(0)
-                        # Replace single quotes with double quotes for valid JSON
-                        json_str = json_str.replace("'", "\"")
-                        flashcards = json.loads(json_str)
-
-                    structured_result["flashcards"] = flashcards
-                    break
-                except (json.JSONDecodeError, IndexError) as e:
-                    print(f"Failed to parse flashcards: {e}")
-                    continue
-
-        # If we still don't have flashcards, try to build them from structured text
-        if "flashcards" not in structured_result:
-            # Look for numbered or bulleted flashcard-like patterns
-            front_back_pairs = re.findall(
-                r"(?:^|\n)(?:\d+\.|\*|\-)\s*(?:Q:|Question:|Front:)?\s*(.*?)\s*(?:A:|Answer:|Back:)?\s*(.*?)(?=\n(?:\d+\.|\*|\-|$)|\Z)", content)
-
-            if front_back_pairs:
-                flashcards = [{"front": front.strip(), "back": back.strip()}
-                              for front, back in front_back_pairs if front.strip() and back.strip()]
-                if flashcards:
-                    structured_result["flashcards"] = flashcards
-
-    # If we detected nested content, extract each section
-    if has_nested_content:
-        for field in expected_fields:
-            # Try multiple patterns for section headers (case-insensitive)
-            field_pattern = f"## {field.replace('_', ' ')}"
-            alt_field_pattern = f"## {field}"
-
-            patterns = [
-                re.search(
-                    f"{field_pattern}\s*([\s\S]*?)(?=##|\Z)", content.lower()),
-                re.search(
-                    f"{alt_field_pattern}\s*([\s\S]*?)(?=##|\Z)", content.lower()),
-                re.search(
-                    f"{field}:\s*([\s\S]*?)(?=\n\n[a-z_]+:|\Z)", content.lower())
-            ]
-
-            # Use the first successful match
-            for match in patterns:
-                if match:
-                    extracted_content = match.group(1).strip()
-                    structured_result[field] = extracted_content
-                    break
-    else:
-        # If no nested content, extract section headers at the top level
-        for field in expected_fields:
-            # Convert field name to lowercase for case-insensitive matching
-            field_pattern = f"## {field.replace('_', ' ')}"
-            alt_field_pattern = f"## {field}"
-
-            patterns = [
-                re.search(
-                    f"{field_pattern}\s*([\s\S]*?)(?=##|\Z)", content.lower()),
-                re.search(
-                    f"{alt_field_pattern}\s*([\s\S]*?)(?=##|\Z)", content.lower()),
-                re.search(
-                    f"{field}:\s*([\s\S]*?)(?=\n\n[a-z_]+:|\Z)", content.lower())
-            ]
-
-            for match in patterns:
-                if match:
-                    structured_result[field] = match.group(1).strip()
-                    break
-
-    return structured_result
-
-
-def process_agent_result(result, agent_type, expected_fields):
-    """
-    Process agent result to ensure consistent and clean structure
-
-    Args:
-        result (dict): Raw agent result
-        agent_type (str): Type of agent
-        expected_fields (list): Expected fields for this agent type
-
-    Returns:
-        dict: Processed result with clean structure
-    """
-    processed_result = {}
-
-    # Check for nested content in any field
-    has_nested_content = False
-    for field in result:
-        if field in expected_fields and isinstance(result[field], str):
-            if any(re.search(f"## {nested_field}", result[field].lower()) for nested_field in expected_fields):
-                has_nested_content = True
-                nested_content = result[field]
-                break
-
-    # If we found nested content, extract it
-    if has_nested_content:
-        extracted = extract_structured_content(
-            nested_content, agent_type, expected_fields)
-
-        # Merge extracted content with existing result, prioritizing extracted content
-        for field in expected_fields:
-            if field in extracted and extracted[field]:
-                processed_result[field] = extracted[field]
-            elif field in result:
-                processed_result[field] = result[field]
-            else:
-                processed_result[field] = f"No {field} provided"
-    else:
-        # No nested content, just ensure all expected fields exist
-        for field in expected_fields:
-            if field in result:
-                processed_result[field] = result[field]
-            else:
-                processed_result[field] = f"No {field} provided"
-
-    # Special handling for diagram agent - ensure diagram_code is raw Mermaid code
-    if agent_type == "diagram" and "diagram_code" in processed_result:
-        # Remove any markdown code block delimiters
-        diagram_code = processed_result["diagram_code"]
-        # Strip markdown code block syntax if present
-        diagram_code = re.sub(r'```mermaid\s*', '', diagram_code)
-        diagram_code = re.sub(r'\s*```$', '', diagram_code)
-        diagram_code = diagram_code.strip()
-        processed_result["diagram_code"] = diagram_code
-
-    return processed_result
-
-
 def run_agent_file_content(topic_request, file_content=None, agent_type="note", session_id=None, chat_history=None):
     """
     Run the specified agent with the given topic and optional files, maintaining conversation history.
 
     Args:
         topic_request (str): The topic to process
-        file_content (list): Optional list of file content after uploading
+        file_contaent (list): Optional list of file content after uploading
         agent_type (str): Type of agent to use 
         session_id (str): Optional session ID for persistence
         chat_history (list): Optional list of previous messages
@@ -760,90 +563,61 @@ def run_agent_file_content(topic_request, file_content=None, agent_type="note", 
 
     chat_history.append({"type": "human", "content": message_content})
 
-    # Clean up the result to ensure it has the correct structure
     if isinstance(result, dict):
-        # Define the expected fields for each agent type
-        expected_fields = {
-            "general": ["planning_process", "answer"],
-            "note": ["planning_process", "research_method", "formatted_notes"],
-            "research": ["planning_process", "formatted_notes", "bibliography"],
-            "step": ["planning_process", "problem_identification", "step_solution", "visual_aids"],
-            "diagram": ["planning_process", "diagram_type_rationale", "diagram_code", "interpretation"],
-            "flashcard": ["planning_process", "organization_approach", "flashcards", "study_tips"],
-            "feynman": ["planning_process", "core_concept", "explanation", "examples", "summary"]
-        }
+        cleaned_result = {}
+        for key, value in result.items():
+            if key == 'messages':
+                message_contents = []
+                if isinstance(value, list):
+                    for msg in value:
+                        if hasattr(msg, 'content'):
+                            message_contents.append(
+                                f"{msg.__class__.__name__}: {msg.content}")
+                        else:
+                            message_contents.append(str(msg))
+                    cleaned_result[key] = message_contents
+            else:
+                cleaned_result[key] = value
 
-        # Check for combined fields and split if needed
-        result = process_agent_result(
-            result, agent_type, expected_fields[agent_type])
-
-        # If there's an "output" field but we're expecting structured fields
-        if "output" in result and agent_type in expected_fields:
-            content = result["output"]
-
-            # Extract structured content using our helper function
-            structured_result = extract_structured_content(
-                content, agent_type, expected_fields[agent_type])
-
-            # Fill in missing fields with defaults
-            for field in expected_fields[agent_type]:
-                if field not in structured_result:
-                    if field in result:
-                        structured_result[field] = result[field]
-                    elif field == expected_fields[agent_type][-1] and not any(f in expected_fields[agent_type][-1] for f in structured_result):
-                        # If last field isn't extracted and has special content, use all content
-                        structured_result[field] = content
-                    else:
-                        structured_result[field] = f"No {field} provided"
-
-            result = structured_result
-
-        # If we got answer but need a different structure
-        elif "answer" in result and agent_type != "general":
-            content = result["answer"]
-
-            # Extract structured content using our helper function
-            structured_result = extract_structured_content(
-                content, agent_type, expected_fields[agent_type])
-
-            # Fill in missing fields with defaults
-            for field in expected_fields[agent_type]:
-                if field not in structured_result:
-                    if field == "planning_process" and "planning_process" in result:
-                        structured_result[field] = result["planning_process"]
-                    elif field == expected_fields[agent_type][-1] and not any(f in expected_fields[agent_type][-1] for f in structured_result):
-                        # If last field isn't extracted, use all content
-                        structured_result[field] = content
-                    else:
-                        structured_result[field] = f"No {field} provided"
-
-            result = structured_result
-
-        # Ensure the result is clean and well-structured
-        result = process_agent_result(
-            result, agent_type, expected_fields[agent_type])
-
-        # Determine AI content for chat history
         ai_content = ""
-        if agent_type == "general" and "answer" in result:
-            ai_content = result["answer"]
-        elif agent_type == "note" and "formatted_notes" in result:
-            ai_content = result["formatted_notes"]
-        elif agent_type == "research" and "formatted_notes" in result:
-            ai_content = result["formatted_notes"]
-        elif agent_type == "step" and "step_solution" in result:
-            ai_content = result["step_solution"]
-        elif agent_type == "diagram" and "diagram_code" in result:
-            ai_content = result["diagram_code"]
-        elif agent_type == "flashcard" and "flashcards" in result:
-            ai_content = json.dumps(result["flashcards"], indent=2)
-        elif agent_type == "feynman" and "explanation" in result:
-            ai_content = result["explanation"]
-        elif "output" in result:
-            ai_content = result["output"]
+        if "answer" in cleaned_result:
+            ai_content = cleaned_result["answer"]
+        elif "output" in cleaned_result:
+            ai_content = cleaned_result["output"]
         else:
-            ai_content = str(result)
+            ai_content = str(cleaned_result)
 
         chat_history.append({"type": "ai", "content": ai_content})
 
     return result, chat_history
+
+
+def display_result(result, agent_type="note"):
+    """
+    Format and display the result based on agent type.
+
+    Args:
+        result (dict): The result from the agent
+        agent_type (str): Type of agent used
+    """
+    print("\n" + "="*50)
+    print(f"FINAL {agent_type.upper()} OUTPUT")
+    print("="*50)
+
+    for key, value in result.items():
+        print(f"\n{key.upper().replace('_', ' ')}:")
+        print(value)
+
+    print("\n" + "="*50)
+
+
+# def main():
+#     result, chat_history = run_agent_file_content(
+#         "What is the capital of France?",
+#         agent_type="note"
+#     )
+#     print(result)
+
+
+# if __name__ == "__main__":
+#     main()

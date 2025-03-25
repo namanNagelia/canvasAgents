@@ -37,34 +37,52 @@ export function AppSidebar({
   setCurrentSession: (id: string | null) => void;
 }) {
   const { logout, user, bearerToken } = useAuth();
-
   const [sessionHistory, setSessionHistory] = useState<any[]>([]);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
-  useEffect(() => {
-    const fetchSessionHistory = async () => {
-      try {
-        const response = await fetch(
-          `${API_URL}/api/agents/get_session_history`,
-          {
-            headers: {
-              Authorization: `Bearer ${bearerToken}`,
-            },
-          }
-        );
+  const fetchSessionHistory = async () => {
+    if (!bearerToken) return;
 
-        if (!response.ok) {
-          throw new Error("Failed to fetch session history");
+    try {
+      const response = await fetch(
+        `${API_URL}/api/agents/get_session_history`,
+        {
+          headers: {
+            Authorization: `Bearer ${bearerToken}`,
+          },
         }
+      );
 
-        const data = await response.json();
-        setSessionHistory(data);
-      } catch (error) {
-        console.error("Error fetching session history:", error);
+      if (!response.ok) {
+        throw new Error("Failed to fetch session history");
       }
+
+      const data = await response.json();
+      setSessionHistory(data);
+    } catch (error) {
+      console.error("Error fetching session history:", error);
+    }
+  };
+
+  // Initial fetch on mount
+  useEffect(() => {
+    if (bearerToken) {
+      fetchSessionHistory();
+    }
+  }, [bearerToken, refreshTrigger]);
+
+  // Listen for refresh events
+  useEffect(() => {
+    const handleRefreshSessions = () => {
+      setRefreshTrigger((prev) => prev + 1);
     };
 
-    fetchSessionHistory();
-  }, [bearerToken]);
+    document.addEventListener("refreshSessions", handleRefreshSessions);
+
+    return () => {
+      document.removeEventListener("refreshSessions", handleRefreshSessions);
+    };
+  }, []);
 
   const handleSessionSelect = (sessionId: string) => {
     setCurrentSession(sessionId);

@@ -10,10 +10,23 @@ import { Menu } from "lucide-react";
 import { CenterChat } from "@/components/centerChat";
 import { useState } from "react";
 import { ExistingChat } from "@/components/exisitngChat";
+
 export default function Dashboard() {
   const { isLoggedIn } = useAuth();
   const navigate = useNavigate();
   const [currentSession, setCurrentSession] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Function to handle setting current session with loading state
+  const handleSetCurrentSession = (sessionId: string | null) => {
+    setIsLoading(true);
+    setCurrentSession(sessionId);
+
+    // Give a short delay to allow component transition
+    setTimeout(() => {
+      setIsLoading(false);
+    }, 500);
+  };
 
   if (!isLoggedIn) {
     navigate("/login");
@@ -23,10 +36,11 @@ export default function Dashboard() {
   return (
     <SidebarProvider>
       <div className="h-screen w-screen overflow-hidden flex">
-        <SidebarWrapper setCurrentSession={setCurrentSession} />
+        <SidebarWrapper setCurrentSession={handleSetCurrentSession} />
         <MainContent
           currentSession={currentSession}
-          setCurrentSession={setCurrentSession}
+          setCurrentSession={handleSetCurrentSession}
+          isLoading={isLoading}
         />
       </div>
     </SidebarProvider>
@@ -54,9 +68,11 @@ function SidebarWrapper({
 function MainContent({
   currentSession,
   setCurrentSession,
+  isLoading,
 }: {
   currentSession: string | null;
   setCurrentSession: (id: string | null) => void;
+  isLoading: boolean;
 }) {
   const { open } = useSidebar();
 
@@ -69,8 +85,15 @@ function MainContent({
       </div>
 
       <div className="h-full w-full flex items-center justify-center">
-        {!currentSession ? (
-          <CenterChat />
+        {isLoading ? (
+          <div className="flex flex-col items-center justify-center gap-2">
+            <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-500 border-t-transparent"></div>
+            <p className="text-gray-600 dark:text-gray-400">
+              Loading session...
+            </p>
+          </div>
+        ) : !currentSession ? (
+          <CenterChat setCurrentSession={setCurrentSession} />
         ) : (
           <ExistingChat sessionId={currentSession} />
         )}

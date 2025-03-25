@@ -10,13 +10,74 @@ import {
   Lightbulb,
   MessageCircle,
 } from "lucide-react";
-
-export const CenterChat = () => {
-  const { user } = useAuth();
+import { Button } from "./ui/button";
+export const CenterChat = ({
+  setCurrentSession,
+}: {
+  setCurrentSession: (sessionId: string) => void;
+}) => {
+  const { user, bearerToken } = useAuth();
   const [inputValue, setInputValue] = useState("");
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [message, setMessage] = useState<string[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const agentBoxesRef = useRef<HTMLDivElement>(null);
+
+  const API_URL = import.meta.env.VITE_API_URL;
+
+  const handleSubmit = async () => {
+    if (!inputValue.trim() || !selectedAgent) return;
+
+    setIsSubmitting(true);
+    try {
+      // 1: Create a new session
+      const session = await fetch(`${API_URL}/api/agents/create_session`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${bearerToken}`,
+        },
+      });
+
+      if (!session.ok) {
+        throw new Error(`Failed to create session: ${session.status}`);
+      }
+
+      const sessionData = await session.json();
+      const sessionId = sessionData.session_id;
+
+      // 2: Send a message to the session
+      const messageResponse = await fetch(`${API_URL}/api/agents/chat`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${bearerToken}`,
+        },
+        body: JSON.stringify({
+          session_id: sessionId,
+          message: inputValue,
+          agent_type: selectedAgent,
+        }),
+      });
+
+      if (!messageResponse.ok) {
+        throw new Error(`Failed to send message: ${messageResponse.status}`);
+      }
+
+      const messageData = await messageResponse.json();
+
+      // 3: Trigger sidebar refresh and navigate to session
+      document.dispatchEvent(new CustomEvent("refreshSessions"));
+      setCurrentSession(sessionId);
+    } catch (error) {
+      console.error("Error during submission:", error);
+      alert("An error occurred. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const adjustTextareaHeight = () => {
     const textarea = textareaRef.current;
@@ -87,51 +148,92 @@ export const CenterChat = () => {
         Hello {user?.name}! I am your personal learning assistant! Select an
         agent and ask me anything!
       </p>
-
-      <Textarea
-        ref={textareaRef}
-        value={inputValue}
-        onChange={handleInputChange}
-        className={`mt-6 w-full max-w-3xl font-bitter text-gray-800 dark:text-gray-200 expanding-textarea ${
-          selectedAgent ? "border-2 border-opacity-70" : ""
-        } ${
-          selectedAgent === "Research"
-            ? "border-blue-500"
-            : selectedAgent === "Notes"
-            ? "border-emerald-500"
-            : selectedAgent === "Step"
-            ? "border-indigo-500"
-            : selectedAgent === "Diagram"
-            ? "border-amber-500"
-            : selectedAgent === "Flashcards"
-            ? "border-rose-500"
-            : selectedAgent === "Feynman"
-            ? "border-yellow-500"
-            : ""
-        }`}
-        placeholder={
-          selectedAgent
-            ? `Ask me about ${selectedAgent.toLowerCase()}...`
-            : "Ask me to take notes, research, generate flashcards, create diagrams or anything else!"
-        }
-        rows={1}
-      />
       <div
-        ref={agentBoxesRef}
-        className="flex flex-row gap-4 mt-6 flex-wrap justify-center max-w-3xl"
+        className={`border-2 p-2 rounded-lg flex flex-col ${
+          selectedAgent === "research"
+            ? "border-blue-500"
+            : selectedAgent === "note"
+            ? "border-emerald-500"
+            : selectedAgent === "step"
+            ? "border-indigo-500"
+            : selectedAgent === "diagram"
+            ? "border-amber-500"
+            : selectedAgent === "flashcard"
+            ? "border-rose-500"
+            : selectedAgent === "feynman"
+            ? "border-yellow-500"
+            : selectedAgent === "general"
+            ? "border-gray-500"
+            : "border-blue-500"
+        }`}
       >
-        {AGENTS.map((agent) => (
-          <AgentBox
-            key={agent.name}
-            agentName={agent.name}
-            icon={agent.icon}
-            description={agent.description}
-            color={agent.color}
-            activeColor={agent.activeColor}
-            selected={selectedAgent === agent.key}
-            onClick={() => setSelectedAgent(agent.key)}
+        <div className="flex flex-wrap gap-2 mb-2 h-16 overflow-y-auto">
+          {AGENTS.map((agent) => (
+            <Button
+              key={agent.key}
+              onClick={() => setSelectedAgent(agent.key)}
+              variant={selectedAgent === agent.key ? "default" : "outline"}
+              size="sm"
+              className={`flex items-center gap-1 ${
+                selectedAgent === agent.key
+                  ? agent.key === "research"
+                    ? "bg-blue-500 hover:bg-blue-600"
+                    : agent.key === "note"
+                    ? "bg-emerald-500 hover:bg-emerald-600"
+                    : agent.key === "step"
+                    ? "bg-indigo-500 hover:bg-indigo-600"
+                    : agent.key === "diagram"
+                    ? "bg-amber-500 hover:bg-amber-600"
+                    : agent.key === "flashcard"
+                    ? "bg-rose-500 hover:bg-rose-600"
+                    : agent.key === "feynman"
+                    ? "bg-yellow-500 hover:bg-yellow-600"
+                    : agent.key === "general"
+                    ? "bg-gray-500 hover:bg-gray-600"
+                    : "bg-blue-500 hover:bg-blue-600"
+                  : ""
+              }`}
+            >
+              {agent.icon}
+              {agent.name}
+            </Button>
+          ))}
+        </div>
+        <div className="flex items-center gap-2">
+          <Textarea
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
+            placeholder="Ask anything..."
+            className="flex-1 min-h-24 resize-none"
           />
-        ))}
+          <Button
+            onClick={handleSubmit}
+            disabled={!inputValue.trim() || !selectedAgent || isSubmitting}
+            className={`px-4 h-24 ${
+              selectedAgent === "research"
+                ? "bg-blue-500 hover:bg-blue-600"
+                : selectedAgent === "note"
+                ? "bg-emerald-500 hover:bg-emerald-600"
+                : selectedAgent === "step"
+                ? "bg-indigo-500 hover:bg-indigo-600"
+                : selectedAgent === "diagram"
+                ? "bg-amber-500 hover:bg-amber-600"
+                : selectedAgent === "flashcard"
+                ? "bg-rose-500 hover:bg-rose-600"
+                : selectedAgent === "feynman"
+                ? "bg-yellow-500 hover:bg-yellow-600"
+                : selectedAgent === "general"
+                ? "bg-gray-500 hover:bg-gray-600"
+                : "bg-blue-500 hover:bg-blue-600"
+            }`}
+          >
+            {isSubmitting ? (
+              <div className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
+            ) : (
+              "Submit"
+            )}
+          </Button>
+        </div>
       </div>
     </div>
   );
@@ -241,3 +343,7 @@ const AGENTS = [
 ];
 
 export { AGENTS, AgentBox };
+
+//1. Make send butotn
+//2: When you send, it will make a new session, and then it will send a chat message
+//3: When a response is back, it navigates to exisitng chat, and refreshes sidebar

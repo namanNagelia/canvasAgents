@@ -11,10 +11,13 @@ import { StepAgentRender } from "./agentRenders/step";
 import { MermaidAgentRender } from "./agentRenders/mermaid";
 import { FlashcardsAgentRender } from "./agentRenders/flashcards";
 import { FeynmanAgentRender } from "./agentRenders/feynman";
+
 interface Message {
   type: "human" | "ai";
   content: string;
   agent_type?: string;
+  isError?: boolean;
+  originalMessage?: string;
 }
 
 interface ChatHistoryMessage {
@@ -186,7 +189,13 @@ export const ExistingChat: React.FC<ExistingChatProps> = ({ sessionId }) => {
   }, [inputValue]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    // Only scroll if there are messages
+    if (messages.length > 0) {
+      const messagesContainer = messagesEndRef.current?.parentElement;
+      if (messagesContainer) {
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+      }
+    }
   }, [messages]);
 
   const handleSubmit = async () => {
@@ -196,7 +205,6 @@ export const ExistingChat: React.FC<ExistingChatProps> = ({ sessionId }) => {
       setIsSubmitting(true);
       setError(null);
 
-      // Show optimistic UI update with user message
       const newUserMessage: Message = {
         type: "human",
         content: inputValue,
@@ -205,7 +213,6 @@ export const ExistingChat: React.FC<ExistingChatProps> = ({ sessionId }) => {
 
       setMessages((prev) => [...prev, newUserMessage]);
 
-      // Add a temporary loading message
       const loadingMessage: Message = {
         type: "ai",
         content: "Loading...",
@@ -214,13 +221,10 @@ export const ExistingChat: React.FC<ExistingChatProps> = ({ sessionId }) => {
 
       setMessages((prev) => [...prev, loadingMessage]);
 
-      // Store input value before clearing
       const submittedValue = inputValue;
 
-      // Clear the input field early so user can type next message while waiting
       setInputValue("");
 
-      // Call API to process the message
       const response = await fetch(`${API_URL}/api/agents/chat/`, {
         method: "POST",
         headers: {
@@ -243,15 +247,44 @@ export const ExistingChat: React.FC<ExistingChatProps> = ({ sessionId }) => {
     } catch (error) {
       console.error("Error submitting message:", error);
 
-      // Remove the loading message
-      setMessages((prev) => prev.filter((msg) => msg.content !== "Loading..."));
-
-      setError(
-        error instanceof Error ? error.message : "Failed to send message"
-      );
+      // Replace loading message with error message
+      setMessages((prev) => {
+        // Remove the loading message
+        const filtered = prev.filter((msg) => msg.content !== "Loading...");
+        // Add error message
+        return [
+          ...filtered,
+          {
+            type: "ai",
+            content: `Error: ${
+              error instanceof Error ? error.message : "Failed to send message"
+            }`,
+            agent_type: selectedAgent,
+            isError: true,
+            originalMessage: inputValue,
+          },
+        ];
+      });
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  // Add a retry function
+  const handleRetry = (originalMessage: string, agentType: string) => {
+    // Set the input value and agent type to the original message
+    setInputValue(originalMessage);
+    setSelectedAgent(agentType);
+
+    // Remove the error message
+    setMessages((prev) =>
+      prev.filter(
+        (msg) => !(msg.isError && msg.originalMessage === originalMessage)
+      )
+    );
+
+    // Focus on the textarea
+    textareaRef.current?.focus();
   };
 
   if (!isLoggedIn) {
@@ -270,20 +303,19 @@ export const ExistingChat: React.FC<ExistingChatProps> = ({ sessionId }) => {
     );
   }
 
-  if (error) {
-    return <div className="text-red-500 text-center p-4">Error: {error}</div>;
-  }
-
   return (
-    <div className="flex flex-col h-full overflow-y-auto p-4">
-      {/* Messages display */}
-      <div className="flex-grow mb-6">
+    <div className="flex flex-col h-full min-h-0">
+      {/* Messages display - add specific classes to control scrolling */}
+      <div
+        className="flex-1 overflow-y-auto p-4 messages-container"
+        style={{ scrollbarGutter: "stable" }}
+      >
         {messages.length > 0 ? (
           messages.map((message, index) => {
             const agentDetails = getAgentDetails(message.agent_type);
             const AgentIcon = agentDetails.icon;
 
-            // Special handling for loading message
+            // Loading message handling
             if (message.content === "Loading...") {
               return (
                 <div key={index} className="flex flex-col mb-4 items-start">
@@ -320,7 +352,47 @@ export const ExistingChat: React.FC<ExistingChatProps> = ({ sessionId }) => {
               );
             }
 
-            // Regular message rendering (your existing code)
+            // Error message handling
+            if (message.isError) {
+              return (
+                <div key={index} className="flex flex-col mb-4 items-start">
+                  <div className="max-w-2xl w-full p-3 rounded-lg bg-red-100 dark:bg-red-900/30 border border-red-300 dark:border-red-800">
+                    <div className="flex items-center gap-2 mb-2">
+                      {
+                        AGENTS.find((agent) => agent.key === message.agent_type)
+                          ?.icon
+                      }
+                      <span className="font-semibold text-sm">
+                        {
+                          AGENTS.find(
+                            (agent) => agent.key === message.agent_type
+                          )?.name
+                        }{" "}
+                        - Error
+                      </span>
+                    </div>
+                    <div className="text-red-600 dark:text-red-300 mb-3">
+                      {message.content}
+                    </div>
+                    <Button
+                      onClick={() =>
+                        handleRetry(
+                          message.originalMessage || "",
+                          message.agent_type || ""
+                        )
+                      }
+                      variant="outline"
+                      size="sm"
+                      className="bg-white dark:bg-gray-800 border-red-300 dark:border-red-700 text-red-600 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/30"
+                    >
+                      Retry
+                    </Button>
+                  </div>
+                </div>
+              );
+            }
+
+            // Regular message rendering
             return (
               <div
                 key={index}
@@ -420,22 +492,40 @@ export const ExistingChat: React.FC<ExistingChatProps> = ({ sessionId }) => {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input area */}
-      <div className="sticky bottom-0 pb-4 pt-2 bg-white dark:bg-gray-900">
+      {/* Input area - keep this fixed at the bottom */}
+      <div className="border-t border-gray-200 dark:border-gray-800 p-4 bg-white dark:bg-gray-900 flex-shrink-0">
         <div className="flex flex-col items-center">
           {/* Agent selection */}
           <div className="flex flex-row gap-3 mb-4 flex-wrap justify-center max-w-3xl">
             {AGENTS.map((agent) => (
-              <AgentBox
-                key={agent.name}
-                agentName={agent.name}
-                icon={agent.icon}
-                description={agent.description}
-                color={agent.color}
-                activeColor={agent.activeColor}
-                selected={selectedAgent === agent.key}
+              <Button
+                key={agent.key}
                 onClick={() => setSelectedAgent(agent.key)}
-              />
+                variant={selectedAgent === agent.key ? "default" : "outline"}
+                size="sm"
+                className={`flex items-center gap-1 ${
+                  selectedAgent === agent.key
+                    ? agent.key === "research"
+                      ? "bg-blue-500 hover:bg-blue-600"
+                      : agent.key === "note"
+                      ? "bg-emerald-500 hover:bg-emerald-600"
+                      : agent.key === "step"
+                      ? "bg-indigo-500 hover:bg-indigo-600"
+                      : agent.key === "diagram"
+                      ? "bg-amber-500 hover:bg-amber-600"
+                      : agent.key === "flashcard"
+                      ? "bg-rose-500 hover:bg-rose-600"
+                      : agent.key === "feynman"
+                      ? "bg-yellow-500 hover:bg-yellow-600"
+                      : agent.key === "general"
+                      ? "bg-gray-500 hover:bg-gray-600"
+                      : "bg-blue-500 hover:bg-blue-600"
+                    : ""
+                }`}
+              >
+                {agent.icon}
+                {agent.name}
+              </Button>
             ))}
           </div>
 
