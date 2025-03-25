@@ -544,8 +544,10 @@ def run_agent_file_content(topic_request, file_content=None, agent_type="note", 
         if message['type'] == 'human':
             langchain_messages.append(HumanMessage(content=message['content']))
         elif message['type'] == 'ai':
-            langchain_messages.append(AIMessage(content=message['content']))
-
+            # Truncate the AI message to limit token usage
+            # Adjust the length as needed
+            truncated_content = message['content'][:1000]
+            langchain_messages.append(AIMessage(content=truncated_content))
     if file_content:
         message_content = f"Please process this topic: {topic_request}. Use the following file content as reference:\n\n{file_content}"
     else:
