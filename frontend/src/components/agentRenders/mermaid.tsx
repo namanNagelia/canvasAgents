@@ -1,4 +1,3 @@
-import React from "react";
 import { AGENTS } from "../centerChat";
 import ReactMarkdown from "react-markdown";
 import rehypeKatex from "rehype-katex";
@@ -10,21 +9,9 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import dynamic from "next/dynamic";
+import Mermaid from "../ui/mermaid";
 
-// Dynamically import Mermaid with no SSR
-const Mermaid = dynamic(() => import("../ui/mermaid"), {
-  ssr: false,
-});
-
-export const MermaidAgentRender = ({
-  message,
-  agentDetails,
-}: {
-  message: any;
-  agentDetails: any;
-}) => {
-  let content = message.content;
+export const MermaidAgentRender = ({ message }: { message: any }) => {
   let parsedContent: any = null;
   let diagramCode = "";
   let interpretation = "";

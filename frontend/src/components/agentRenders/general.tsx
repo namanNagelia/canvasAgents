@@ -1,4 +1,3 @@
-import React from "react";
 import { AGENTS } from "../centerChat";
 import ReactMarkdown from "react-markdown";
 import rehypeKatex from "rehype-katex";
@@ -11,13 +10,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 
-export const GeneralAgentRender = ({
-  message,
-  agentDetails,
-}: {
-  message: any;
-  agentDetails: any;
-}) => {
+export const GeneralAgentRender = ({ message }: { message: any }) => {
   if (message.type === "ai" && typeof message.content === "string") {
     try {
       message.content = JSON.parse(message.content);

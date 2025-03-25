@@ -74,8 +74,6 @@ function MainContent({
   setCurrentSession: (id: string | null) => void;
   isLoading: boolean;
 }) {
-  const { open } = useSidebar();
-
   return (
     <div className="flex-1 relative">
       <div className="absolute top-4 left-4 z-10">

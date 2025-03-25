@@ -4,7 +4,6 @@ import { GeneralAgentRender } from "./agentRenders/general";
 import { AGENTS } from "./centerChat";
 import { Textarea } from "./ui/textarea";
 import { Button } from "./ui/button";
-import { AgentBox } from "./centerChat";
 import { NoteAgentRender } from "./agentRenders/note";
 import { ResearchAgentRender } from "./agentRenders/research";
 import { StepAgentRender } from "./agentRenders/step";
@@ -20,29 +19,9 @@ interface Message {
   originalMessage?: string;
 }
 
-interface ChatHistoryMessage {
-  type: string;
-  content: string;
-}
-
 interface UserInput {
   message: string;
   agent_type: string;
-}
-
-interface AIResponse {
-  message: any;
-  agent_type: string;
-}
-
-interface SessionData {
-  id: string;
-  user_input: UserInput[];
-  ai_response: AIResponse[];
-  chat_history: ChatHistoryMessage[];
-  created_at?: string;
-  updated_at?: string;
-  user_id?: string;
 }
 
 interface ExistingChatProps {
@@ -50,8 +29,7 @@ interface ExistingChatProps {
 }
 
 export const ExistingChat: React.FC<ExistingChatProps> = ({ sessionId }) => {
-  const { user, bearerToken, isLoggedIn } = useAuth();
-  const [sessionData, setSessionData] = useState<SessionData | null>(null);
+  const { bearerToken, isLoggedIn } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -88,8 +66,6 @@ export const ExistingChat: React.FC<ExistingChatProps> = ({ sessionId }) => {
 
       const data = await response.json();
       const sessionDetails = data.sessionDetails || data;
-
-      setSessionData(sessionDetails);
 
       const transformedMessages: Message[] = [];
 
@@ -164,13 +140,6 @@ export const ExistingChat: React.FC<ExistingChatProps> = ({ sessionId }) => {
   useEffect(() => {
     fetchSessionDetails();
   }, [sessionId, bearerToken]);
-
-  const getAgentDetails = (agentType: string | undefined) => {
-    const agent = AGENTS.find(
-      (agent) => agent.key === agentType?.toLowerCase()
-    );
-    return agent || AGENTS[0];
-  };
 
   const adjustTextareaHeight = () => {
     const textarea = textareaRef.current;
@@ -312,9 +281,6 @@ export const ExistingChat: React.FC<ExistingChatProps> = ({ sessionId }) => {
       >
         {messages.length > 0 ? (
           messages.map((message, index) => {
-            const agentDetails = getAgentDetails(message.agent_type);
-            const AgentIcon = agentDetails.icon;
-
             // Loading message handling
             if (message.content === "Loading...") {
               return (
@@ -420,44 +386,23 @@ export const ExistingChat: React.FC<ExistingChatProps> = ({ sessionId }) => {
                   )}
 
                   {message.type === "ai" && message.agent_type === "general" ? (
-                    <GeneralAgentRender
-                      message={message}
-                      agentDetails={agentDetails}
-                    />
+                    <GeneralAgentRender message={message} />
                   ) : message.type === "ai" && message.agent_type === "note" ? (
-                    <NoteAgentRender
-                      message={message}
-                      agentDetails={agentDetails}
-                    />
+                    <NoteAgentRender message={message} />
                   ) : message.type === "ai" &&
                     message.agent_type === "research" ? (
-                    <ResearchAgentRender
-                      message={message}
-                      agentDetails={agentDetails}
-                    />
+                    <ResearchAgentRender message={message} />
                   ) : message.type === "ai" && message.agent_type === "step" ? (
-                    <StepAgentRender
-                      message={message}
-                      agentDetails={agentDetails}
-                    />
+                    <StepAgentRender message={message} />
                   ) : message.type === "ai" &&
                     message.agent_type === "diagram" ? (
-                    <MermaidAgentRender
-                      message={message}
-                      agentDetails={agentDetails}
-                    />
+                    <MermaidAgentRender message={message} />
                   ) : message.type === "ai" &&
                     message.agent_type === "flashcard" ? (
-                    <FlashcardsAgentRender
-                      message={message}
-                      agentDetails={agentDetails}
-                    />
+                    <FlashcardsAgentRender message={message} />
                   ) : message.type === "ai" &&
                     message.agent_type === "feynman" ? (
-                    <FeynmanAgentRender
-                      message={message}
-                      agentDetails={agentDetails}
-                    />
+                    <FeynmanAgentRender message={message} />
                   ) : message.type === "ai" &&
                     message.agent_type !== "general" ? (
                     <>

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { AGENTS } from "../centerChat";
 import ReactMarkdown from "react-markdown";
 import rehypeKatex from "rehype-katex";
@@ -82,13 +82,7 @@ const FlashCard = ({ flashcard }: { flashcard: Flashcard }) => {
   );
 };
 
-export const FlashcardsAgentRender = ({
-  message,
-  agentDetails,
-}: {
-  message: any;
-  agentDetails: any;
-}) => {
+export const FlashcardsAgentRender = ({ message }: { message: any }) => {
   let content = message.content;
   const [currentCardIndex, setCurrentCardIndex] = useState(0);
 
@@ -238,7 +232,7 @@ export const FlashcardsAgentRender = ({
 
 // Add CSS for card flipping effect
 export const FlashcardStyles = () => (
-  <style jsx global>{`
+  <style>{`
     .rotate-y-180 {
       transform: rotateY(180deg);
     }

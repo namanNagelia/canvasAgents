@@ -1,9 +1,8 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { useCookies } from "react-cookie";
+const API_URL = import.meta.env.VITE_API_URL;
 
 export const useAuth = () => {
-  const [cookies] = useCookies(["access_token"]);
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [user, setUser] = useState<any>(null);
@@ -16,7 +15,7 @@ export const useAuth = () => {
       setIsLoading(true);
 
       // Since we're using httpOnly cookies, we need to check auth state through API
-      const response = await fetch("http://localhost:8000/api/auth/protected", {
+      const response = await fetch(`${API_URL}/api/auth/protected`, {
         method: "GET",
         credentials: "include", // This is crucial for sending cookies
         headers: {
@@ -54,7 +53,7 @@ export const useAuth = () => {
   const login = async (email: string, password: string) => {
     try {
       setIsLoading(true);
-      const response = await fetch("http://localhost:8000/api/auth/login", {
+      const response = await fetch(`${API_URL}/api/auth/login`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -64,8 +63,6 @@ export const useAuth = () => {
       });
 
       if (response.ok) {
-        const data = await response.json();
-
         // After login, verify auth state
         const authSuccess = await checkAuth();
 
@@ -93,7 +90,7 @@ export const useAuth = () => {
   const logout = async () => {
     try {
       setIsLoading(true);
-      const response = await fetch("http://localhost:8000/api/auth/logout", {
+      const response = await fetch(`${API_URL}/api/auth/logout`, {
         method: "GET",
         credentials: "include",
       });

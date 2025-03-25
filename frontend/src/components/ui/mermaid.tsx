@@ -21,7 +21,7 @@ const Mermaid: React.FC<MermaidProps> = ({ chart }) => {
         // Improved responsiveness settings
         er: { useMaxWidth: true },
         flowchart: { useMaxWidth: true, htmlLabels: true },
-        sequence: { useMaxWidth: true, htmlLabels: true },
+        sequence: { useMaxWidth: true },
         journey: { useMaxWidth: true },
         gantt: { useMaxWidth: true },
         pie: { useMaxWidth: true },
@@ -45,7 +45,7 @@ const Mermaid: React.FC<MermaidProps> = ({ chart }) => {
 
         // Try basic syntax fixes
         // Fix policy notation with quotes
-        cleanChart = cleanChart.replace(/\[([^\]]*"[^\]]*)\]/g, (match, p1) => {
+        cleanChart = cleanChart.replace(/\[([^\]]*"[^\]]*)\]/g, (p1) => {
           return "[" + p1.replace(/"/g, "&quot;") + "]";
         });
 

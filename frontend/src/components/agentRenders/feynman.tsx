@@ -1,4 +1,3 @@
-import React from "react";
 import { AGENTS } from "../centerChat";
 import ReactMarkdown from "react-markdown";
 import rehypeKatex from "rehype-katex";
@@ -11,13 +10,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 
-export const FeynmanAgentRender = ({
-  message,
-  agentDetails,
-}: {
-  message: any;
-  agentDetails: any;
-}) => {
+export const FeynmanAgentRender = ({ message }: { message: any }) => {
   let content = message.content;
 
   // If content is a string, try parsing it as JSON

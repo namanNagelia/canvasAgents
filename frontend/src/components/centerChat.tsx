@@ -19,11 +19,8 @@ export const CenterChat = ({
   const { user, bearerToken } = useAuth();
   const [inputValue, setInputValue] = useState("");
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [message, setMessage] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const agentBoxesRef = useRef<HTMLDivElement>(null);
 
   const API_URL = import.meta.env.VITE_API_URL;
 
@@ -66,9 +63,6 @@ export const CenterChat = ({
         throw new Error(`Failed to send message: ${messageResponse.status}`);
       }
 
-      const messageData = await messageResponse.json();
-
-      // 3: Trigger sidebar refresh and navigate to session
       document.dispatchEvent(new CustomEvent("refreshSessions"));
       setCurrentSession(sessionId);
     } catch (error) {
@@ -85,10 +79,6 @@ export const CenterChat = ({
       textarea.style.height = "auto";
       textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`;
     }
-  };
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setInputValue(e.target.value);
   };
 
   useEffect(() => {

@@ -36,7 +36,7 @@ export function AppSidebar({
 }: {
   setCurrentSession: (id: string | null) => void;
 }) {
-  const { logout, user, bearerToken } = useAuth();
+  const { logout, bearerToken } = useAuth();
   const [sessionHistory, setSessionHistory] = useState<any[]>([]);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
