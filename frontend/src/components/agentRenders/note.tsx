@@ -14,7 +14,6 @@ export const NoteAgentRender = ({ message }: { message: any }) => {
   if (message.type === "ai" && typeof message.content === "string") {
     try {
       message.content = JSON.parse(message.content);
-      console.log(message.content);
     } catch (error) {
       console.error("Failed to parse message content as JSON:", error);
     }

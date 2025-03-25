@@ -21,8 +21,6 @@ interface Flashcard {
 const FlashCard = ({ flashcard }: { flashcard: Flashcard }) => {
   const [isFlipped, setIsFlipped] = useState(false);
 
-  console.log(flashcard);
-
   const processContent = (content: string) => {
     if (!content) return "";
     return content

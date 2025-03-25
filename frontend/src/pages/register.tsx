@@ -17,6 +17,8 @@ import {
 } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
+const API_URL = import.meta.env.VITE_API_URL;
+
 export default function Register() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -44,7 +46,7 @@ export default function Register() {
     try {
       setIsLoading(true);
 
-      const response = await fetch("http://localhost:8000/api/auth/register", {
+      const response = await fetch(`${API_URL}/api/auth/register`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

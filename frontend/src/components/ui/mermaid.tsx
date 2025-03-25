@@ -16,7 +16,6 @@ const Mermaid: React.FC<MermaidProps> = ({ chart }) => {
         theme: "default",
         securityLevel: "loose",
         fontFamily: "sans-serif",
-        // Set global max width to fit container
         htmlLabels: true,
         // Improved responsiveness settings
         er: { useMaxWidth: true },
@@ -37,20 +36,36 @@ const Mermaid: React.FC<MermaidProps> = ({ chart }) => {
         // Generate a unique ID for this diagram
         const id = `mermaid-${Math.random().toString(36).substring(2, 11)}`;
 
-        // Create clean chart content
+        // Create clean chart content - improved to handle both formats and nested mermaid tags
         let cleanChart = chart
-          .replace(/```mermaid/g, "")
+          .replace(/```mermaid\s*```mermaid/g, "```mermaid") // Handle double mermaid tags
+          .replace(/```mermaid\s*/g, "")
           .replace(/```/g, "")
           .trim();
 
-        // Try basic syntax fixes
-        // Fix policy notation with quotes
-        cleanChart = cleanChart.replace(/\[([^\]]*"[^\]]*)\]/g, (p1) => {
-          return "[" + p1.replace(/"/g, "&quot;") + "]";
-        });
+        // Ensure flowchart syntax is properly formatted
+        if (
+          cleanChart.startsWith("graph TD;") ||
+          cleanChart.startsWith("graph td;")
+        ) {
+          cleanChart = cleanChart.replace(/;/, " ");
+        }
 
         // Normalize line breaks
         cleanChart = cleanChart.replace(/\r\n/g, "\n");
+
+        // Escape special characters in node labels
+        cleanChart = cleanChart.replace(/\[([^\]]*)\]/g, (match, content) => {
+          // Replace characters that might conflict with Mermaid syntax
+          const escaped = content
+            .replace(/=/g, "&#61;")
+            .replace(/\(/g, "&#40;")
+            .replace(/\)/g, "&#41;")
+            .replace(/\^/g, "&#94;")
+            .replace(/'/g, "&#39;")
+            .replace(/"/g, "&quot;");
+          return `[${escaped}]`;
+        });
 
         // Render the chart with error handling
         mermaid
@@ -81,7 +96,7 @@ const Mermaid: React.FC<MermaidProps> = ({ chart }) => {
           })
           .catch((err) => {
             console.error("Mermaid render error:", err);
-            // Show simple error placeholder
+            // Show error with the actual error message
             if (mermaidRef.current) {
               mermaidRef.current.innerHTML = `
                 <div class="p-4 bg-gray-100 dark:bg-gray-700 rounded-md text-center">
@@ -91,6 +106,7 @@ const Mermaid: React.FC<MermaidProps> = ({ chart }) => {
                     <line x1="12" y1="8" x2="12" y2="16"></line>
                   </svg>
                   <p>Error rendering diagram</p>
+                  <p class="text-xs text-red-500">${err.message}</p>
                 </div>`;
             }
           });
@@ -106,6 +122,9 @@ const Mermaid: React.FC<MermaidProps> = ({ chart }) => {
                 <line x1="12" y1="8" x2="12" y2="16"></line>
               </svg>
               <p>Error rendering diagram</p>
+              <p class="text-xs text-red-500">${
+                error instanceof Error ? error.message : "Unknown error"
+              }</p>
             </div>`;
         }
       }

@@ -347,10 +347,20 @@ INSTRUCTIONS:
 5. Explain the key components of your diagram
 6. Always verify that your Mermaid syntax is valid
 
+DIAGRAM FORMAT:
+- Preferably use the format: graph TD (or flowchart TD) for top-down flowcharts
+- You can also use graph LR for left-to-right flowcharts when appropriate
+- Your diagram should be enclosed in triple backticks with mermaid language specifier like:
+  ```mermaid
+  graph TD
+    A[Start] --> B[Process]
+    B --> C[End]
+  ```
+
 When returning your diagram, use the structured output format with these fields:
 - planning_process: Detailed explanation of your diagram planning process
 - diagram_type_rationale: Description of why you chose this particular diagram type
-- diagram_code: Complete Mermaid code so i can render it in markdown js.
+- diagram_code: Complete Mermaid code so it can be rendered in markdown
 - interpretation: Brief explanation of how to interpret the diagram
 """
 

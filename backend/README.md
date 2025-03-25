@@ -26,9 +26,9 @@ This is a FastAPI backend for the project.
    uvicorn main:app --reload
    ```
 
-The API will be available at http://localhost:8080
+The API will be available at http://localhost:8000
 
 ## API Documentation
 
-- API documentation is available at http://localhost:8080/docs
-- ReDoc UI is available at http://localhost:8080/redoc
+- API documentation is available at http://localhost:8000/docs
+- ReDoc UI is available at http://localhost:8000/redoc

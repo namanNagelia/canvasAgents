@@ -17,7 +17,6 @@ export const FeynmanAgentRender = ({ message }: { message: any }) => {
   if (message.type === "ai" && typeof message.content === "string") {
     try {
       content = JSON.parse(message.content);
-      console.log("Parsed Feynman content:", content);
     } catch (error) {
       console.error("Failed to parse message content as JSON:", error);
     }
