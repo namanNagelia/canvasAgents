@@ -24,7 +24,6 @@ export const CenterChat = ({
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const [fileIDs, setFileIDs] = useState<string[]>([]);
   const [sessID, setSessID] = useState<string>(uuidv4());
   const API_URL = import.meta.env.VITE_API_URL;
   const uploadComponentRef = useRef<HTMLDivElement>(null);
@@ -247,7 +246,7 @@ export const CenterChat = ({
       <div ref={uploadComponentRef}>
         <UploadFile
           sessionId={sessID}
-          setFileIDs={setFileIDs}
+          setFileIDs={() => {}}
           isTemporary={true}
         />
       </div>
