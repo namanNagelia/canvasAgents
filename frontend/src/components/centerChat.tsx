@@ -11,6 +11,9 @@ import {
   MessageCircle,
 } from "lucide-react";
 import { Button } from "./ui/button";
+import { UploadFile } from "./uploadFile";
+import { v4 as uuidv4 } from "uuid";
+
 export const CenterChat = ({
   setCurrentSession,
 }: {
@@ -21,31 +24,46 @@ export const CenterChat = ({
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-
+  const [fileIDs, setFileIDs] = useState<string[]>([]);
+  const [sessID, setSessID] = useState<string>("");
   const API_URL = import.meta.env.VITE_API_URL;
 
+  useEffect(() => {
+    const createInitialSession = async () => {
+      const newSessionId = uuidv4();
+      try {
+        const response = await fetch(
+          `${API_URL}/api/agents/create_session/${newSessionId}`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${bearerToken}`,
+            },
+          }
+        );
+
+        if (!response.ok) {
+          throw new Error("Failed to create initial session");
+        }
+
+        const data = await response.json();
+        setSessID(data.session_id);
+      } catch (error) {
+        console.error("Error creating initial session:", error);
+      }
+    };
+
+    if (bearerToken) {
+      createInitialSession();
+    }
+  }, [bearerToken]);
+
   const handleSubmit = async () => {
-    if (!inputValue.trim() || !selectedAgent) return;
+    if (!inputValue.trim() || !selectedAgent || !sessID) return;
 
     setIsSubmitting(true);
     try {
-      // 1: Create a new session
-      const session = await fetch(`${API_URL}/api/agents/create_session`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${bearerToken}`,
-        },
-      });
-
-      if (!session.ok) {
-        throw new Error(`Failed to create session: ${session.status}`);
-      }
-
-      const sessionData = await session.json();
-      const sessionId = sessionData.session_id;
-
-      // 2: Send a message to the session
       const messageResponse = await fetch(`${API_URL}/api/agents/chat`, {
         method: "POST",
         headers: {
@@ -53,9 +71,10 @@ export const CenterChat = ({
           Authorization: `Bearer ${bearerToken}`,
         },
         body: JSON.stringify({
-          session_id: sessionId,
+          session_id: sessID,
           message: inputValue,
           agent_type: selectedAgent,
+          file_ids: fileIDs,
         }),
       });
 
@@ -64,7 +83,7 @@ export const CenterChat = ({
       }
 
       document.dispatchEvent(new CustomEvent("refreshSessions"));
-      setCurrentSession(sessionId);
+      setCurrentSession(sessID);
     } catch (error) {
       console.error("Error during submission:", error);
       alert("An error occurred. Please try again.");
@@ -130,145 +149,106 @@ export const CenterChat = ({
   }, []);
 
   return (
-    <div className="w-full flex flex-col items-center justify-center my-12 px-4">
-      <h1 className="font-raleway text-5xl font-bold text-center">
-        Learn about <span className="rainbow-text">anything</span>
-      </h1>
-      <p className="mt-4 text-gray-600 dark:text-gray-400 text-center max-w-md font-bitter">
-        Hello {user?.name}! I am your personal learning assistant! Select an
-        agent and ask me anything!
-      </p>
-      <div
-        className={`border-2 p-2 rounded-lg flex flex-col ${
-          selectedAgent === "research"
-            ? "border-blue-500"
-            : selectedAgent === "note"
-            ? "border-emerald-500"
-            : selectedAgent === "step"
-            ? "border-indigo-500"
-            : selectedAgent === "diagram"
-            ? "border-amber-500"
-            : selectedAgent === "flashcard"
-            ? "border-rose-500"
-            : selectedAgent === "feynman"
-            ? "border-yellow-500"
-            : selectedAgent === "general"
-            ? "border-gray-500"
-            : "border-blue-500"
-        }`}
-      >
-        <div className="flex flex-wrap gap-2 mb-2 h-16 overflow-y-auto">
-          {AGENTS.map((agent) => (
+    <div className="w-full h-full flex">
+      <div className="flex-1 flex flex-col items-center justify-center my-12 px-6">
+        <h1 className="font-raleway text-5xl font-bold text-center mb-6 bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-600 dark:from-gray-100 dark:to-gray-400">
+          Learn about <span className="rainbow-text">anything</span>
+        </h1>
+        <p className="mt-4 text-gray-600 dark:text-gray-400 text-center max-w-md font-bitter">
+          Hello {user?.name}! I am your personal learning assistant! Select an
+          agent and ask me anything!
+        </p>
+        <div
+          className={`border-2 p-2 rounded-lg flex flex-col ${
+            selectedAgent === "research"
+              ? "border-blue-500"
+              : selectedAgent === "note"
+              ? "border-emerald-500"
+              : selectedAgent === "step"
+              ? "border-indigo-500"
+              : selectedAgent === "diagram"
+              ? "border-amber-500"
+              : selectedAgent === "flashcard"
+              ? "border-rose-500"
+              : selectedAgent === "feynman"
+              ? "border-yellow-500"
+              : selectedAgent === "general"
+              ? "border-gray-500"
+              : "border-blue-500"
+          }`}
+        >
+          <div className="flex flex-wrap gap-2 mb-2 h-16 overflow-y-auto">
+            {AGENTS.map((agent) => (
+              <Button
+                key={agent.key}
+                onClick={() => setSelectedAgent(agent.key)}
+                variant={selectedAgent === agent.key ? "default" : "outline"}
+                size="sm"
+                className={`flex items-center gap-1 ${
+                  selectedAgent === agent.key
+                    ? agent.key === "research"
+                      ? "bg-blue-500 hover:bg-blue-600"
+                      : agent.key === "note"
+                      ? "bg-emerald-500 hover:bg-emerald-600"
+                      : agent.key === "step"
+                      ? "bg-indigo-500 hover:bg-indigo-600"
+                      : agent.key === "diagram"
+                      ? "bg-amber-500 hover:bg-amber-600"
+                      : agent.key === "flashcard"
+                      ? "bg-rose-500 hover:bg-rose-600"
+                      : agent.key === "feynman"
+                      ? "bg-yellow-500 hover:bg-yellow-600"
+                      : agent.key === "general"
+                      ? "bg-gray-500 hover:bg-gray-600"
+                      : "bg-blue-500 hover:bg-blue-600"
+                    : ""
+                }`}
+              >
+                {agent.icon}
+                {agent.name}
+              </Button>
+            ))}
+          </div>
+          <div className="flex items-center gap-2">
+            <Textarea
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              placeholder="Ask anything..."
+              className="flex-1 min-h-24 resize-none"
+            />
             <Button
-              key={agent.key}
-              onClick={() => setSelectedAgent(agent.key)}
-              variant={selectedAgent === agent.key ? "default" : "outline"}
-              size="sm"
-              className={`flex items-center gap-1 ${
-                selectedAgent === agent.key
-                  ? agent.key === "research"
-                    ? "bg-blue-500 hover:bg-blue-600"
-                    : agent.key === "note"
-                    ? "bg-emerald-500 hover:bg-emerald-600"
-                    : agent.key === "step"
-                    ? "bg-indigo-500 hover:bg-indigo-600"
-                    : agent.key === "diagram"
-                    ? "bg-amber-500 hover:bg-amber-600"
-                    : agent.key === "flashcard"
-                    ? "bg-rose-500 hover:bg-rose-600"
-                    : agent.key === "feynman"
-                    ? "bg-yellow-500 hover:bg-yellow-600"
-                    : agent.key === "general"
-                    ? "bg-gray-500 hover:bg-gray-600"
-                    : "bg-blue-500 hover:bg-blue-600"
-                  : ""
+              onClick={handleSubmit}
+              disabled={
+                !inputValue.trim() || !selectedAgent || isSubmitting || !sessID
+              }
+              className={`px-4 h-24 ${
+                selectedAgent === "research"
+                  ? "bg-blue-500 hover:bg-blue-600"
+                  : selectedAgent === "note"
+                  ? "bg-emerald-500 hover:bg-emerald-600"
+                  : selectedAgent === "step"
+                  ? "bg-indigo-500 hover:bg-indigo-600"
+                  : selectedAgent === "diagram"
+                  ? "bg-amber-500 hover:bg-amber-600"
+                  : selectedAgent === "flashcard"
+                  ? "bg-rose-500 hover:bg-rose-600"
+                  : selectedAgent === "feynman"
+                  ? "bg-yellow-500 hover:bg-yellow-600"
+                  : selectedAgent === "general"
+                  ? "bg-gray-500 hover:bg-gray-600"
+                  : "bg-blue-500 hover:bg-blue-600"
               }`}
             >
-              {agent.icon}
-              {agent.name}
+              {isSubmitting ? (
+                <div className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
+              ) : (
+                "Submit"
+              )}
             </Button>
-          ))}
-        </div>
-        <div className="flex items-center gap-2">
-          <Textarea
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            placeholder="Ask anything..."
-            className="flex-1 min-h-24 resize-none"
-          />
-          <Button
-            onClick={handleSubmit}
-            disabled={!inputValue.trim() || !selectedAgent || isSubmitting}
-            className={`px-4 h-24 ${
-              selectedAgent === "research"
-                ? "bg-blue-500 hover:bg-blue-600"
-                : selectedAgent === "note"
-                ? "bg-emerald-500 hover:bg-emerald-600"
-                : selectedAgent === "step"
-                ? "bg-indigo-500 hover:bg-indigo-600"
-                : selectedAgent === "diagram"
-                ? "bg-amber-500 hover:bg-amber-600"
-                : selectedAgent === "flashcard"
-                ? "bg-rose-500 hover:bg-rose-600"
-                : selectedAgent === "feynman"
-                ? "bg-yellow-500 hover:bg-yellow-600"
-                : selectedAgent === "general"
-                ? "bg-gray-500 hover:bg-gray-600"
-                : "bg-blue-500 hover:bg-blue-600"
-            }`}
-          >
-            {isSubmitting ? (
-              <div className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
-            ) : (
-              "Submit"
-            )}
-          </Button>
+          </div>
         </div>
       </div>
-    </div>
-  );
-};
-
-const AgentBox = ({
-  agentName,
-  icon,
-  description,
-  color,
-  activeColor,
-  selected,
-  onClick,
-}: {
-  agentName: string;
-  icon: React.ReactNode;
-  description: string;
-  color: string;
-  activeColor: string;
-  selected: boolean;
-  onClick: () => void;
-}) => {
-  return (
-    <div
-      className={`
-        flex flex-col items-center justify-center 
-        p-3 rounded-lg cursor-pointer transition-all duration-300 
-        ${selected ? activeColor : color}
-        ${
-          selected
-            ? "border-2 scale-105 shadow-md"
-            : "border-2 border-transparent hover:scale-105 hover:shadow-md"
-        }
-      `}
-      onClick={onClick}
-    >
-      <div className="flex flex-col items-center gap-2">
-        <div className="flex items-center gap-2">
-          <div className="h-8 w-8 opacity-80">{icon}</div>
-          <h1 className="font-bitter text-sm font-bold">{agentName}</h1>
-        </div>
-        <div className="text-center">
-          <p className="font-bitter text-xs opacity-70">{description}</p>
-        </div>
-      </div>
+      {sessID && <UploadFile sessionId={sessID} setFileIDs={setFileIDs} />}
     </div>
   );
 };
@@ -332,8 +312,4 @@ const AGENTS = [
   },
 ];
 
-export { AGENTS, AgentBox };
-
-//1. Make send butotn
-//2: When you send, it will make a new session, and then it will send a chat message
-//3: When a response is back, it navigates to exisitng chat, and refreshes sidebar
+export { AGENTS };

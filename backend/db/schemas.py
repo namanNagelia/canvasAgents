@@ -45,7 +45,6 @@ class LLMSession(Base):
     ai_response = Column(JSONB, default=lambda: [])
     chat_history = Column(JSONB, default=[])
     # List of {"request": "...", "response": {...}}
-    files = relationship("UploadedFile", back_populates="session")
     user = relationship("User", back_populates="sessions")
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow)
@@ -55,10 +54,8 @@ class UploadedFile(Base):
     __tablename__ = "uploaded_files"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    session_id = Column(UUID(as_uuid=True), ForeignKey(
-        "llm_sessions.id"), nullable=False)
+    session_id = Column(UUID(as_uuid=True), nullable=False)
     content = Column(String, nullable=False)
-    session = relationship("LLMSession", back_populates="files")
     base64 = Column(String, nullable=False)
     fileType = Column(String, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)

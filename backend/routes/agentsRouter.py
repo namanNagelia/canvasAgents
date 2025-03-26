@@ -55,9 +55,30 @@ def with_session_cleanup(func):
     return wrapper
 
 
-@router.post("/create_session")
+@router.get("/get_files/{session_id}")
 @with_session_cleanup
-async def create_session(request: Request):
+async def get_files(request: Request, session_id: str):
+    """
+    This route is used to get the files for the session
+
+    inputs{
+        - session_id: str
+    }
+
+    outputs{
+        - files: list
+    }
+    """
+    files = session.query(UploadedFile).filter(
+        UploadedFile.session_id == session_id
+    ).all()
+    print("Files: ", files)
+    return {"files": files}
+
+
+@router.post("/create_session/{session_id}")
+@with_session_cleanup
+async def create_session(request: Request, session_id: str):
     """
     Create a new session for the user
     pass in the bearer token in the header
@@ -78,7 +99,7 @@ async def create_session(request: Request):
     user_id = session.query(User).filter(
         User.email == email).first().id
 
-    llm_Session = LLMSession(user_id=user_id)
+    llm_Session = LLMSession(user_id=user_id, id=session_id)
     session.add(llm_Session)
     session.commit()
 
@@ -101,42 +122,49 @@ async def upload_file(request: Request):
         - session_id: str
     }
     """
-    data = await request.form()
-    session_id = data.get("session_id")
-    file: fastapi.UploadFile = data.get("file")
+    try:
+        data = await request.form()
+        session_id = data.get("session_id")
+        print("Session ID: ", session_id)
+        file: fastapi.UploadFile = data.get("file")
 
-    if not session_id or not file:
-        raise HTTPException(
-            status_code=400, detail="Session ID and file are required")
+        if not session_id or not file:
+            raise HTTPException(
+                status_code=400, detail="Session ID and file are required")
 
-    auth_result = validateBearer(request)
-    if not auth_result["status"]:
-        raise HTTPException(status_code=401, detail="Unauthorized")
+        auth_result = validateBearer(request)
+        if not auth_result["status"]:
+            raise HTTPException(status_code=401, detail="Unauthorized")
 
-    file_content = await file.read()
-    content_type = file.content_type
+        file_content = await file.read()
+        content_type = file.content_type
 
-    base64_data = base64.b64encode(file_content).decode("utf-8")
+        base64_data = base64.b64encode(file_content).decode("utf-8")
 
-    text_content = process_file(file_content)
+        text_content = process_file(file_content)
 
-    uploaded_file = UploadedFile(
-        session_id=session_id,
-        content=text_content,
-        base64=base64_data,
-        fileType=content_type
-    )
+        uploaded_file = UploadedFile(
+            content=text_content,
+            base64=base64_data,
+            fileType=content_type,
+            session_id=session_id
+        )
+        print("Uploaded file: ", uploaded_file.session_id)
 
-    session.add(uploaded_file)
-    session.commit()
-    session.refresh(uploaded_file)
+        session.add(uploaded_file)
+        session.commit()
+        session.refresh(uploaded_file)
 
-    return {
-        "file_id": str(uploaded_file.id),
-        "session_id": str(session_id),
-        "file_type": content_type,
-        "content_length": len(text_content)
-    }
+        return {
+            "file_id": str(uploaded_file.id),
+            "session_id": str(session_id),
+            "file_type": content_type,
+            "content_length": len(text_content)
+        }
+    except Exception as e:
+        print(f"Error in upload_file: {str(e)}")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
 
 def clean_dict(data: Any) -> Any:
@@ -268,13 +296,14 @@ async def chat(request: Request):
     file_contents = {}
     print("Got initial data")
 
-    if file_ids:
+    if len(file_ids) > 0:
         uploaded_files = session.query(UploadedFile).filter(
             UploadedFile.id.in_([uuid.UUID(fid) for fid in file_ids])
         ).all()
 
         for file in uploaded_files:
             file_contents[str(file.id)] = file.content
+    print("File contents: ", file_contents)
 
     if file_contents:
         print("Running agent with file content")
@@ -282,7 +311,7 @@ async def chat(request: Request):
             "\n\n".join(file_contents.values())
         result, updated_lang_history = run_agent_file_content(
             context_message,
-            file_content=None,  # Not using this
+            file_content=file_contents,
             agent_type=agent_type,
             session_id=session_id,
             chat_history=chat_history
@@ -291,7 +320,7 @@ async def chat(request: Request):
         print("Running agent")
         result, updated_lang_history = run_agent_file_content(
             message,
-            file_content=None,
+            file_content=file_contents,
             agent_type=agent_type,
             session_id=session_id,
             chat_history=chat_history
