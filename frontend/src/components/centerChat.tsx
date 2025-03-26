@@ -25,45 +25,43 @@ export const CenterChat = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [fileIDs, setFileIDs] = useState<string[]>([]);
-  const [sessID, setSessID] = useState<string>("");
+  const [sessID, setSessID] = useState<string>(uuidv4());
   const API_URL = import.meta.env.VITE_API_URL;
-
-  useEffect(() => {
-    const createInitialSession = async () => {
-      const newSessionId = uuidv4();
-      try {
-        const response = await fetch(
-          `${API_URL}/api/agents/create_session/${newSessionId}`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${bearerToken}`,
-            },
-          }
-        );
-
-        if (!response.ok) {
-          throw new Error("Failed to create initial session");
-        }
-
-        const data = await response.json();
-        setSessID(data.session_id);
-      } catch (error) {
-        console.error("Error creating initial session:", error);
-      }
-    };
-
-    if (bearerToken) {
-      createInitialSession();
-    }
-  }, [bearerToken]);
+  const uploadComponentRef = useRef<HTMLDivElement>(null);
 
   const handleSubmit = async () => {
-    if (!inputValue.trim() || !selectedAgent || !sessID) return;
+    if (!inputValue.trim() || !selectedAgent) return;
 
     setIsSubmitting(true);
     try {
+      // 1. Create a new session
+      const newSessionId = uuidv4();
+      const session = await fetch(
+        `${API_URL}/api/agents/create_session/${newSessionId}`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${bearerToken}`,
+          },
+        }
+      );
+
+      if (!session.ok) {
+        throw new Error(`Failed to create session: ${session.status}`);
+      }
+
+      const sessionData = await session.json();
+      const sessionId = sessionData.session_id;
+      setSessID(sessionId);
+
+      // 2. Upload any pending files
+      let uploadedFileIds: string[] = [];
+      if (typeof window !== "undefined" && (window as any).uploadPendingFiles) {
+        uploadedFileIds = await (window as any).uploadPendingFiles(sessionId);
+      }
+
+      // 3. Send the message with the uploaded file IDs
       const messageResponse = await fetch(`${API_URL}/api/agents/chat`, {
         method: "POST",
         headers: {
@@ -71,10 +69,10 @@ export const CenterChat = ({
           Authorization: `Bearer ${bearerToken}`,
         },
         body: JSON.stringify({
-          session_id: sessID,
+          session_id: sessionId,
           message: inputValue,
           agent_type: selectedAgent,
-          file_ids: fileIDs,
+          file_ids: uploadedFileIds, // Use the uploaded file IDs
         }),
       });
 
@@ -83,7 +81,7 @@ export const CenterChat = ({
       }
 
       document.dispatchEvent(new CustomEvent("refreshSessions"));
-      setCurrentSession(sessID);
+      setCurrentSession(sessionId);
     } catch (error) {
       console.error("Error during submission:", error);
       alert("An error occurred. Please try again.");
@@ -218,9 +216,7 @@ export const CenterChat = ({
             />
             <Button
               onClick={handleSubmit}
-              disabled={
-                !inputValue.trim() || !selectedAgent || isSubmitting || !sessID
-              }
+              disabled={!inputValue.trim() || !selectedAgent || isSubmitting}
               className={`px-4 h-24 ${
                 selectedAgent === "research"
                   ? "bg-blue-500 hover:bg-blue-600"
@@ -248,7 +244,13 @@ export const CenterChat = ({
           </div>
         </div>
       </div>
-      {sessID && <UploadFile sessionId={sessID} setFileIDs={setFileIDs} />}
+      <div ref={uploadComponentRef}>
+        <UploadFile
+          sessionId={sessID}
+          setFileIDs={setFileIDs}
+          isTemporary={true}
+        />
+      </div>
     </div>
   );
 };

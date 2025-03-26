@@ -194,19 +194,22 @@ export const ExistingChat: React.FC<ExistingChatProps> = ({ sessionId }) => {
       setInputValue("");
       console.log(fileIDs);
 
-      const response = await fetch(`${API_URL}/api/agents/chat/`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${bearerToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          message: submittedValue,
-          session_id: sessionId,
-          agent_type: selectedAgent,
-          file_ids: fileIDs,
-        }),
-      });
+      const response = await fetch(
+        API_URL.replace("http://", "https://") + "/api/agents/chat",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${bearerToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            message: submittedValue,
+            session_id: sessionId,
+            agent_type: selectedAgent,
+            file_ids: fileIDs,
+          }),
+        }
+      );
 
       if (!response.ok) {
         throw new Error(`API request failed with status ${response.status}`);
